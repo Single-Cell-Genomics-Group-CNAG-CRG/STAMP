@@ -26,7 +26,7 @@ This repository contains the code used in the **STAMP** project, focusing on spa
       - `Clust.R`: Performs clustering analysis.
     - **Lvl1/** and **Lvl2/**:
       - Scripts used for different rounds of cell population annotation.
-    - **Sub-sample Folders** (if applicable):
+    - **Sub-sample Folders**:
       - For samples containing multiple sub-samples (e.g., multiplexed slides), there are folders like **Clines/** and **PBMC/** (e.g., in `stamp_3/`), which contain analyses of the respective sub-samples.
 
 ## R Version
