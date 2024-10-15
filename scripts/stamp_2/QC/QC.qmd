@@ -83,7 +83,6 @@ discard_area <- isOutlier(sce$Area.um2,
                          nmads = 2.5)
 ```
 
-
 ```{r}
 extr_thr <- function(df){
 return <- list()
@@ -94,76 +93,42 @@ return(c(lower,higher))
 ```
 
 ```{r}
-gg_hist <- function(df, outliers, var, title) {
-  sum_thr <- extr_thr(outliers)
-  median_val <- round(median(df[[var]]), 2)
+cd <- as.data.frame(colData(sce))
 
-  plot <- ggplot(df, aes_string(x = var)) + 
-              geom_histogram(bins = 200)  + 
-              geom_vline(xintercept = sum_thr, linetype = "dashed", color = "red") + 
-              theme_bw() +
-              theme(axis.text = element_text(size = 10, color = "black"),
-                    text = element_text(size = 15, color = "black"),
-                    plot.subtitle = element_text(size = 12),
-                    panel.grid = element_blank()) +
-              labs(title = "", 
-                   y = "", x = title,
-                   subtitle = glue::glue("Median: {number(median_val, big.mark = '.')}; Lower thr: {number(sum_thr[1], big.mark = '.')}; Higher thr: {number(sum_thr[2], big.mark = '.')}")) + 
-              scale_x_log10()
-   return(plot)
-}
-```
+qcmet_hist <- \(var,isOut_df,xmin,xmax){
+# var
+mean <- round(median(cd[[var]]),0)
 
-```{r}
-suppressWarnings({
-df <- as.data.frame(colData(sce))
+thr <- extr_thr(isOut_df)
 
-# df <- df[df$sum > 100 & df$detected > 100 & df$Area.um2 > 30,] ???
+if(var == "sum") {xlab = "nCount"}
+if(var == "detected") {xlab = "nFeature"}
+if(var == "Area.um2") {xlab = "Cell area (um2)"}
 
-gg_qc_metrics <- wrap_plots(
-                gg_hist(df, discard_sum, "sum", "nCounts"),
-                gg_hist(df, discard_detected, "detected", "nFeatures"),
-                gg_hist(df, discard_area, "Area.um2", "Area.um2"),
-                ncol = 3)
-})
-```
-
-# Fig 1B
-```{r}
-scientific_10 <- function(x) {
-  parse(text=gsub("e\\+?0?", " %*% 10^", scales::scientific_format()(x)))
+ggplot(cd, aes(x = !!sym(var))) +
+    geom_histogram(fill = "lightgrey", color = "black", bins = 20, alpha = 0.5) +
+  theme_bw() +
+  scale_x_continuous(limits = c(xmin,xmax)) +
+  geom_vline(xintercept = mean, color = "red", size = 1.5) +
+  geom_vline(xintercept = thr[[1]], color = "red",linetype = "dashed", size = 1) +
+  geom_vline(xintercept = thr[[2]], color = "red",linetype = "dashed", size = 1) +
+  labs(y = "# cells", x = xlab, subtitle = mean) +
+  theme(panel.grid = element_blank(), 
+        text = element_text(size = 20, color = "black"),
+        axis.text = element_text(size = 16, color = "black"),
+        plot.subtitle = element_text(size = 16,color = "red")) +
+    scale_y_continuous(breaks = c(0, 2000,6000,10000)) 
 }
 
-plot_hist_with_median_ggplot <- function(data, outliers, column_name, xlab, xlim_value) {
-  values <- data[[column_name]]
-  median_value <- round(median(values), 0)
-  sum_thr <- extr_thr(outliers)
-  
-  ggplot(data, aes(x = values)) +
-    geom_histogram(fill = "lightgrey", color = "black", alpha = 0.5) +
-    geom_vline(xintercept = median_value, color = "red", size = 1) +
-    labs(x = xlab, y = "Frequency", title = "", subtitle = paste("Median:", median_value)) +
-    scale_x_continuous(labels = scientific_10, limits = c(0, xlim_value)) +  # Use limits in scale_x_continuous
-    scale_y_continuous(labels = scientific_10) +
-    theme_bw() +
-    theme(panel.grid = element_blank(), text = element_text(size = 15, color = "black"),
-          axis.text = element_text(size = 10, color = "black"))
-}
-
-qc_metrics <- wrap_plots(
-                plot_hist_with_median_ggplot(df, discard_sum, "sum", "nCount", 10000),
-                plot_hist_with_median_ggplot(df, discard_detected, "detected", "nFeature", 700),
-                plot_hist_with_median_ggplot(df, discard_area, "Area.um2", "Area.um2", 700),
-                ncol = 1) +
-                plot_layout(axis_titles = "collect")
-```
-
-```{r}
-pdf(file = glue("{proj_dir}/figures/fig1/raw/qc_hist.pdf"), width = 4, height = 9)
-qc_metrics
+pdf("/Users/emanuelepitino/Desktop/fig1/qc_hist.pdf", height = 7, width = 4)
+wrap_plots(
+  qcmet_hist("sum",discard_sum,0,13000),
+  qcmet_hist("detected",discard_detected,0,1000),
+  qcmet_hist("Area.um2",discard_area,0,1000),
+  ncol = 1) +
+  plot_layout(axis_titles = "collect")
 dev.off()
 
-saveRDS(qc_metrics, glue("{proj_dir}/figures/fig1/rds/qc.rds"))
 ```
 
 # Filter
@@ -176,29 +141,6 @@ filt <- sce[,sce$sum > as.numeric(attr(discard_sum, "threshold")["lower"]) &
              sce$Area.um2 < as.numeric(attr(discard_area, "threshold")["higher"])]
 ```
 
-## QC histograms
-```{r, fig.width=10, fig.height=12}
-suppressMessages(suppressWarnings({
-  gg_qc_metrics <- gg_qc_metrics +
-    plot_annotation(
-      title = glue("Quality control - {stamp} - {sample}"),
-      subtitle = glue("Raw: {number(ncol(sce), big.mark = '.')} Cells; Filtered: {number(ncol(filt), big.mark = '.')} Cells"),
-      theme = theme(
-        plot.title = element_text(size = 20, face = "bold"),  # Adjust title size
-        plot.subtitle = element_text(size = 16)              # Adjust subtitle size
-      )
-    )
-  gg_qc_metrics
-}))
-```
-
-
-## fig.2
-```{r}
-pdf(glue("{proj_dir}/figures/fig1/raw/qc.pdf"), width = 15, height = 4)
-gg_qc_metrics
-dev.off()
-```
 
 # Border effect
 ```{r}
@@ -259,17 +201,17 @@ plot_d_border <- function(df, title, thr) {
     geom_vline(xintercept = thr, color = "red", linetype = "dashed") +
     labs(
       subtitle = title,
-      x = "d FOV border (px)",
+      x = "distance from FOV border (px)",
       y = "nCount"
     ) +
     theme_bw() +
-    theme(axis.text = element_text(size = 10, color = "black"),
-                    text = element_text(size = 15, color = "black"),
-                    plot.subtitle = element_text(size = 12),
-                    panel.grid = element_blank()) +
-    scale_x_continuous(labels = scientific_10) + 
-    scale_y_continuous(labels = scientific_10) 
-    
+    scale_y_continuous(breaks = c(2000, 4000, 6000)) + 
+    scale_x_continuous(breaks = c(0, 100, 300,500)) + 
+    theme(
+      text = element_text(size = 20, color = "black"),
+      axis.text = element_text(size = 16, color = "black"),
+      plot.subtitle = element_text(size = 16,color = "black"),
+      panel.grid = element_blank())
   # Return the plot object
   return(p)
 }
@@ -278,15 +220,16 @@ plot_d_border <- function(df, title, thr) {
 ```{r}
 wh(20,10)
 par(mfrow = c(2, 2))
-a <-plot_d_border(left[left$d_border_px <500,], "Left", 25)
-b <- plot_d_border(right[right$d_border_px <500,], "Right", 25)
-c <- plot_d_border(bottom[bottom$d_border_px <500,], "Bottom", 25)
-d <- plot_d_border(top[top$d_border_px <500,], "Top", 25)
+a <-plot_d_border(left[left$d_border_px <500,], "i) left", 25)
+b <- plot_d_border(right[right$d_border_px <500,],"ii) right", 25)
+c <- plot_d_border(bottom[bottom$d_border_px <500,], "iii) bottom", 25)
+d <- plot_d_border(top[top$d_border_px <500,], "iv) top", 25)
 ```
 
 ```{r}
-gg_border_effect <- wrap_plots(a,b,c,d, ncol = 2) + plot_annotation(title = glue("Border effect on {stamp} - {sample}")) +
+gg_border_effect <- wrap_plots(a,b,c,d, ncol = 2) +
   plot_layout(axis_titles = "collect")
+gg_border_effect
 ```
 
 ```{r}
@@ -357,9 +300,9 @@ gg_border_eff_quantification <- ggplot(tbl_long, aes(x = Var1, y = Count, fill =
 gg_border_eff_quantification <- gg_border_eff_quantification +
   theme_bw() +
   theme(
-    axis.text = element_text(size = 10, color = "black"),
-    text = element_text(size = 15, color = "black"),
-    plot.subtitle = element_text(size = 12),
+    text = element_text(size = 20, color = "black"),
+    axis.text = element_text(size = 16, color = "black"),
+    plot.subtitle = element_text(size = 16,color = "black"),
     panel.grid = element_blank(),
     legend.position = "top") +
   scale_x_discrete(
@@ -370,9 +313,20 @@ print(gg_border_eff_quantification)
 ```
 
 ```{r fig.width=20, fig.height= 15}
-wrap_plots(gg_border_effect, gg_border_eff_quantification, nrow = 2) +
-  plot_annotation(title  = glue("Border effect - {stamp} - {sample}"))
+c <-wrap_plots(
+  qcmet_hist("sum",discard_sum,0,13000),
+  qcmet_hist("detected",discard_detected,0,1000),
+  qcmet_hist("Area.um2",discard_area,0,1000),
+  ncol = 1) +
+  plot_layout(axis_titles = "collect")
+
+de <- wrap_plots(gg_border_effect, gg_border_eff_quantification, nrow = 2)
+
+pdf("/Users/emanuelepitino/Desktop/fig1/cde.pdf", height = 8, width = 15)
+wrap_plots(c,de, ncol = 2) + plot_layout(widths = c(1,3))
+dev.off()
 ```
+
 
 ```{r}
 pdf(glue("{proj_dir}/figures/fig1/raw/bord_eff.pdf"), width = 6, height = 7)

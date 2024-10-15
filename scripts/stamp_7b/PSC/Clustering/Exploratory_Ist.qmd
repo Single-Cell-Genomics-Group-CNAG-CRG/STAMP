@@ -50,9 +50,6 @@ source(glue("{dir}/scripts/misc/BIN.R"))
 ```{r}
 stamp <- "stamp_7b"
 sample <- "iPSCs"
-dir <- glue("{here()}")
-source(glue("{dir}/scripts/misc/paths.R"))
-source(glue("{dir}/scripts/misc/BIN.R"))
 
 res_dir <- glue("{proj_dir}/data/{stamp}/{sample}")
 sce <- qread(glue("{res_dir}/PreProcNew.qs"), nthreads = 8)
@@ -100,12 +97,13 @@ ggplot(df, aes(x = Var1, y = Freq)) +
 df <- as.data.frame(colData(sce))
 df <- df[sample(rownames(df)),]
 
- ggplot(df, aes(x = CenterX_global_px, y = CenterY_global_px, color = label_prob)) + 
-  scale_color_viridis_c() +
+ ggplot(df, aes(x = CenterX_global_px, y = CenterY_global_px, color = sample)) + 
+#  scale_color_viridis_c() +
   ggrastr::rasterise(geom_point(size = 0.1, shape = 16), dpi = 800) +
   theme_bw() + 
   theme(panel.grid = element_blank(), text = element_text(colour = "black", size = 20), 
-        axis.text = element_text(colour = "black", size = 15)) +
+        axis.text = element_blank(),
+        axis.ticks = element_blank()) +
   labs(x = "x_px", y = "y_px") +
   coord_equal() +
   labs(color = "IST prob")
@@ -162,7 +160,6 @@ gg_fp <- ggplot(fp_layout$cellpos, aes(x = x, y = y, color = fp_layout$clust)) +
 
 gg_fp
 ```
-
 
 ## InSituType Profiles
 
@@ -236,6 +233,11 @@ hm <- ComplexHeatmap::Heatmap(t(mtx_scaled),
               #row_order = match(c("g","d","i","e","i","e","d","f","k","h","g","j"), rownames(t(mtx_scaled))))
 
 hm
+```
+
+# Save sce
+```{r}
+qsave(sce, file = glue("{res_dir}/clustered_sce.qs"))
 ```
 
 ```{r}

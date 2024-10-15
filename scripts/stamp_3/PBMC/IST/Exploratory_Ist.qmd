@@ -69,6 +69,83 @@ pal <- Polychrome::createPalette(26,c("#99FFFF", "#FF99FF", "#FFFF99"))
 names(pal) <- unique(sce$label)
 ```
 
+# Principal Component Regression
+```{r}
+.pcr <- \(sce, x) {
+    y <- reducedDim(sce, "PCA")
+    z <- summary(lm(y ~ sce[[x]]))
+    r2 <- sapply(z, \(.) .$adj.r.squared)
+    data.frame(x, pc=seq_along(r2), r2)
+}
+# for multiple variables (mock code):
+xs <- c("label","Area.um2","sum","detected","CenterX_global_px","CenterY_global_px")
+df <- do.call(rbind, lapply(xs, \(x) .pcr(sce, x)))
+
+
+pal <- Polychrome::createPalette(26,c("#99FFFF", "#FF99FF", "#FFFF99"))
+names(pal) <- unique(df$x)
+
+ggplot(df, aes(x = pc, y = r2, color = x)) +
+  geom_line() +
+  geom_point() +
+  theme_bw() + 
+  scale_x_continuous(breaks = unique(df$pc)) +
+  theme(panel.grid = element_blank(),
+        axis.text = element_text(color = "black", size = 15),
+        axis.title = element_text(color = "black", size = 25)) +
+  scale_color_manual(values = pal) +
+  scale_fill_manual(values = pal)
+```
+
+```{r}
+df <- as.data.frame(colData(sce)) # cd
+pca <- reducedDim(sce,"PCA") # pc
+
+df <- cbind(df,pca) # merge
+df <- df[sample(nrow(df)), ] # shuffle
+
+pal <- Polychrome::createPalette(n_distinct(sce$label), c("#FBB4AE", "#B3CDE3", "#CCEBC5"))
+names(pal) <- unique(sce$label)
+
+
+ggplot(df, aes(x = PC1, y = PC2, color = log1p(CenterX_global_px))) +
+  geom_point(shape = 16, size = 0.1) +
+  theme_bw() +
+  scale_color_viridis_c() +
+  #scale_color_manual(values = pal) +
+  theme(
+    text = element_text(size = 25, color = "black"),
+    axis.text = element_text(size = 20, color = "black"),
+    legend.text = element_text(size = 12),
+    legend.title = element_text(size = 18),
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank()) +
+  coord_equal()
+```
+
+```{r}
+
+gg_box <- \(var){
+p <- ggplot(df, aes(x = label, y = !!sym(var), color = label)) +
+  geom_boxplot(outlier.size = 0.1) +
+  theme_bw() +
+  theme(panel.grid = element_blank()) +
+  scale_color_manual(values = pal) +
+  theme(legend.position = "none") 
+  
+  if(var == "sum" | var == "detected" | var == "Mean.DAPI") {p <- p + scale_y_log10()}
+return(p)
+}
+
+gg_box("total")
+gg_box("detected")
+gg_box("Area.um2")
+
+gg_box("unassignedTranscripts")
+
+
+```
+
 ## Cell Density distribution
 ```{r}
 df <- as.data.frame(colData(sce))

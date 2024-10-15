@@ -5,6 +5,7 @@ suppressPackageStartupMessages({
   library(SparseArray)
   library(glue)
   library(here)
+  library(qs)
   library(SingleCellExperiment)
 })
 
@@ -18,8 +19,6 @@ dir <- glue("{proj_dir}/data/stamp_7b/raw/raw_proc")
 
 sce <- qread( glue("{proj_dir}/data/stamp_7b/raw/raw_proc/raw_sce.qs"), nthreads = 8)
 
-gg_cells <- ggplot(md, aes(x = CenterX_global_px, y = CenterY_global_px)) + 
-   ggrastr::rasterise(geom_point(size = 0.01), dpi = 800)
 
 # Add samples information from layout and artifacts from AtoMx
 samples <- list(
@@ -31,10 +30,10 @@ samples <- list(
   iESC_72h = c(190:250),
   iESC_96h = c(311:372),
   iESC_120h = c(601:654),
-  iPSC_parental = c(490:545),
-  endoderm = c(434:489),
-  mesoderm = c(373:433),
-  ectoderm = c(655:708)
+  ectoderm = c(490:545),
+  mesoderm = c(434:489),
+  endoderm = c(373:433),
+  iPSC_parental = c(655:708)
 )
 
 invisible(lapply(names(samples), function(name) {
@@ -42,8 +41,3 @@ invisible(lapply(names(samples), function(name) {
 }))
 
 qsave(sce, file = glue("{proj_dir}/data/stamp_7b/raw/raw_proc/layout_sce.qs"), nthreads = 8)
-
-
-
-
-

@@ -4,7 +4,7 @@
 mkdir -p ./html
 
 # Loop through each sample and render the .qmd file
-for sample in iESC_0h iESC_6h iESC_12h iESC_24h iESC_48h iESC_72h iESC_96h iESC_120h; do
+for sample in iPSC_parental mesoderm endoderm ectoderm; do
   # Create a temporary directory for each sample
   temp_dir=$(mktemp -d)
 

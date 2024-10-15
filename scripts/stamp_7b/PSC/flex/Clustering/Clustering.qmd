@@ -1,0 +1,227 @@
+---
+title: "Clustering & Doublets Removal - Flex - Stamp 7b - `r params$sample`"
+subtitle: "Emanuele Pitino"
+date: "`r Sys.Date()`"
+format: 
+  html:
+    theme: superhero
+    smooth-scroll: true
+    code-fold: true
+    self-contained: true
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+params:
+  sample: !expr NA
+  npcs: !expr NA
+editor: source
+editor_options: 
+  chunk_output_type: console
+execute:
+  echo: true
+  fig-width: 12     
+  fig-height: 9 
+---
+
+## Setup
+### Libraries
+```{r}
+suppressPackageStartupMessages({
+library(SingleCellExperiment)
+library(dplyr)
+library(here)
+library(scater)
+library(scuttle)
+library(scran)
+library(glue)
+library(qs)
+library(scales)
+library(bluster)
+})
+```
+
+### Paths
+```{r}
+dir <- glue("{here()}")
+source(glue("{dir}/scripts/misc/paths.R"))
+source(glue("{dir}/scripts/misc/BIN.R"))
+
+sample <- params$sample
+#sample <- "iESC_0h"
+stamp <- "Stamp_7b"
+npcs <- params$npcs
+#stamp <- "stamp_7b"
+dir <- glue("{here()}")
+source(glue("{dir}/scripts/misc/paths.R"))
+source(glue("{dir}/scripts/misc/BIN.R"))
+```
+
+### Load data
+```{r}
+base_dir <- glue("{proj_dir}/data/{stamp}/processed/flex/{sample}")
+
+sce <- qread(glue("{base_dir}/proc_sce.qs"), nthreads = 8)
+sce
+```
+
+# Clustering
+```{r}
+# Build SNN graph
+snn.gr <- buildSNNGraph(sce, type = "jaccard", use.dimred="PCA", BPPARAM = bp)
+# Run Louvain
+clusters <- igraph::cluster_louvain(snn.gr, resolution = 0.8)
+```
+
+## Pairwise modularity score
+```{r}
+# Cluster Modularity score
+ratio <- bluster::pairwiseModularity(snn.gr, clusters$membership, as.ratio=TRUE)
+library(pheatmap)
+pheatmap(log2(ratio+1), cluster_rows=FALSE, cluster_cols=FALSE,
+         color=colorRampPalette(c("gold", "navy"))(100))
+```
+
+## Clusters in Umap
+```{r, fig.width= 8, fig.height= 5}
+# Assign labels
+sce$label <- as.character(clusters$membership)
+
+pal <- Polychrome::createPalette(n_distinct(sce$label), c("#fc6060", "#74f774", "#7c7cfc"))
+names(pal) <- unique(sce$label)
+
+sce <- sce[, sample(ncol(sce))]
+plotReducedDim(sce, "UMAP", colour_by ="label", point_size = 1, scattermore = T) +
+  scale_color_manual(values = pal) +
+  guides(colour = guide_legend(override.aes = list(alpha = 1))) +
+  labs(color = "Cluster")
+```
+
+## Clusters numbers
+
+```{r}
+df <- as.data.frame(colData(sce))
+df <- as.data.frame(table(df$label))  %>%
+        mutate(pct = round(Freq/sum(Freq),2))
+df$Var1 <- factor(df$Var1, levels = df$Var1[order(-df$Freq)])
+
+ggplot(df, aes(x = Var1, y = Freq, fill = Var1)) + 
+  geom_col() + 
+  geom_text(aes(label = Freq), vjust = -0.5, size = 5) +
+  scale_fill_manual(values = pal) + 
+  theme_bw() +
+  theme(text = element_text(size = 15, color = "black"),
+        axis.text = element_text(size = 10, color = "black")) +
+  labs(x = "Cluster", y = "nCells", fill = "Cluster")
+```
+
+## QC metrics per cluster
+
+```{r}
+df <- as.data.frame(colData(sce))
+
+# reorder by mean ncount
+df$label <- factor(df$label, levels = df %>% 
+  group_by(label) %>% 
+  summarise(mean_sum = mean(sum)) %>% 
+  arrange(-mean_sum) %>% 
+  pull(label))
+
+# Create the plot
+ggplot(df, aes(x = label, y = sum)) + 
+  geom_jitter(shape = 16, alpha = 0.8, size = 0.8, aes(color = log(detected))) +
+  geom_boxplot(alpha = 0.8, outlier.shape = NA, fill = NA) +
+  scale_color_gradient(low = "navy", high = "gold4") + 
+  labs(x = "Cluster", y = "nCount", color = "Log(nFeature)") + 
+  theme_bw() +
+  theme(text = element_text(size = 15, color = "black"),
+        axis.text = element_text(size = 10, color = "black"))
+```
+
+## Viz top HVGs
+```{r}
+hvg <- metadata(sce)[[glue("hvg_{sample}")]]
+plotHeatmap(sce, features = hvg[1:20],
+            center = TRUE, colour_columns_by = "label", 
+            order_columns_by = "label",
+            treeheight_row = 0, treeheight_col = 0,
+            main = "Top 20 HVGs")
+```
+
+# Run scDblFinder
+```{r}
+set.seed(10010101)
+library(scDblFinder)
+sce <- scDblFinder(sce, clusters= sce$label, BPPARAM = bp)
+```
+
+## nFeature/nCount
+```{r}
+df <- as.data.frame(colData(sce))
+
+ndbl <- sum(df$scDblFinder.class == "doublet")
+nsgl <- sum(df$scDblFinder.class == "singlet")
+
+pctdbl <- round(ndbl/(ndbl+nsgl)*100,2)
+
+ggplot(df, aes(x = detected, y = sum, color = scDblFinder.class)) +
+  geom_point(shape = 16, size = 0.4) +
+  scale_color_manual(values = c("singlet" = "green4", "doublet" = "red4")) +
+            labs(subtitle = glue("Doublets: {pctdbl}%") ,x = "nFeature", y = "nCount", color = "scDblFinder", title = "nFeat vs nCount") + 
+            theme_bw() +
+            theme(text = element_text(size = 15, color = "black"),
+                  axis.text = element_text(size = 10, color = "black")) +
+            guides(color = guide_legend(override.aes = list(size = 3)))
+```
+
+## Doublets per cluster
+```{r}
+df <- as.data.frame(colData(sce))
+df <- as.data.frame(table(df$label, df$scDblFinder.class))
+
+# Calculate the percentage and reorder by 'singlet' percentage
+df <- df %>%
+  group_by(Var1) %>%
+  mutate(pct = round(Freq / sum(Freq), 2)) %>%
+  ungroup()
+
+# Calculate the percentage of 'singlets' for reordering
+singlet_pct <- df %>% 
+  filter(Var2 == "singlet") %>% 
+  select(Var1, pct)
+
+# Reorder Var1 by the percentage of 'singlets'
+df$Var1 <- factor(df$Var1, levels = singlet_pct$Var1[order(singlet_pct$pct, decreasing = TRUE)])
+
+# Make Var2 a factor to control the order in the legend and plot
+df$Var2 <- factor(df$Var2, levels = c("doublet", "singlet"))
+
+# Create the plot
+ggplot(df, aes(x = Var1, y = pct, fill = Var2)) +
+  scale_fill_manual(values = c("singlet" = "green4", "doublet" = "red4")) +
+  geom_col(position = "stack") + 
+  labs(x = "Cluster", y = "%", fill = "scDblFinder", title = "Doublets % per Cluster") + 
+  theme_bw() +
+  theme(text = element_text(size = 15, color = "black"),
+        axis.text = element_text(size = 10, color = "black")) + 
+  guides(color = guide_legend(override.aes = list(size = 3)))
+```
+
+## Doublets Umap
+```{r, fig.width= 12, fig.height= 5}
+wh(12,5)
+wrap_plots(plotReducedDim(sce, "UMAP", colour_by="label", point_size = 2, scattermore = TRUE) +
+  scale_color_manual(values = pal) +
+  guides(colour = guide_legend(override.aes = list(alpha = 1))) +
+  labs(color = "Cluster"),
+  
+  plotReducedDim(sce, "UMAP", colour_by="scDblFinder.class", point_size = 2, scattermore = TRUE) +
+  guides(colour = guide_legend(override.aes = list(alpha = 1))))
+```
+
+# Save data
+```{r}
+outdir <- glue("{proj_dir}/data/{stamp}/processed/flex/{sample}")
+dir.create(outdir, showWarnings = F, recursive = T)
+qsave(sce, glue("{outdir}/clust_sce.qs"), nthreads = 8)
+```

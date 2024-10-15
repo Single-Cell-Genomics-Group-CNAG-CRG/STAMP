@@ -1,0 +1,295 @@
+---
+title: "Annotation - Stamp_13a"
+subtitle: "Emanuele Pitino"
+date: "`r Sys.Date()`"
+format: 
+  html:
+    theme: superhero
+    smooth-scroll: true
+    code-fold: true
+    self-contained: true
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+editor: source
+editor_options: 
+  chunk_output_type: console
+execute:
+  echo: true
+  fig-width: 16     
+  fig-height: 12 
+---
+
+### Libraries
+
+```{r}
+suppressPackageStartupMessages({
+library(SingleCellExperiment)
+library(dplyr)
+library(here)
+library(scater)
+library(glue)
+library(qs)
+library(BiocParallel)
+library(BiocNeighbors)
+library(BiocSingular)
+library(data.table)
+library(spatstat)
+library(InSituType)
+})
+```
+
+### Data loading
+
+```{r}
+dir <- glue("{here()}")
+source(glue("{dir}/scripts/misc/paths.R"))
+source(glue("{dir}/scripts/misc/BIN.R"))
+```
+
+```{r}
+stamp <- "stamp_13a"
+res_dir <- glue("{proj_dir}/data/{stamp}/processed")
+sce <- qread(glue("{res_dir}/anno_sce.qs"), nthreads = 8)
+
+dir <- glue("{proj_dir}/data/{stamp}/Ist")
+unsup <- qread(glue("{dir}/unsup_20_25.qs"))
+```
+
+
+```{r}
+sce$label <- unsup$clust[colnames(sce)]
+sce$label_prob <- unsup$prob[colnames(sce)]
+
+pal <- Polychrome::createPalette(26,c("#99FFFF", "#FF99FF", "#FFFF99"))
+names(pal) <- unique(sce$label)
+```
+
+# Principal Component Regression
+```{r}
+.pcr <- \(sce, x) {
+    y <- reducedDim(sce, "PCA")
+    z <- summary(lm(y ~ sce[[x]]))
+    r2 <- sapply(z, \(.) .$adj.r.squared)
+    data.frame(x, pc=seq_along(r2), r2)
+}
+# for multiple variables (mock code):
+xs <- c("label","Area.um2","sum","detected","experiment","replicate","timepoint")
+df <- do.call(rbind, lapply(xs, \(x) .pcr(sce, x)))
+
+
+pal_pcr <- Polychrome::createPalette(26,c("#99FFFF", "#FF99FF", "#FFFF99"))
+names(pal_pcr) <- unique(df$x)
+
+ggplot(df, aes(x = pc, y = r2, color = x)) +
+  geom_line() +
+  geom_point() +
+  theme_bw() + 
+  scale_x_continuous(breaks = unique(df$pc)) +
+  theme(panel.grid = element_blank(),
+        axis.text = element_text(color = "black", size = 15),
+        axis.title = element_text(color = "black", size = 25),
+        aspect.ratio = 1/2) +
+  scale_color_manual(values = pal_pcr) +
+  scale_fill_manual(values = pal_pcr)
+
+```
+
+
+```{r}
+cd <- as.data.frame(colData(sce))
+df <- as.data.frame(table(cd$label,cd$experiment)) %>%
+  group_by(Var2) %>%
+  mutate(pct = round(Freq/ sum(Freq),4))
+
+ggplot(df, aes(x = Var2, y = pct, fill = Var1)) +
+  geom_col() +
+  theme_bw() +
+  scale_fill_manual(values = pal, guide = guide_legend(ncol = 1)) +  # Single-column legend
+  scale_y_continuous(expand = c(0, 0)) +  # Remove empty space at top and bottom
+  theme(
+    panel.grid = element_blank(),
+    aspect.ratio = 3/1,
+    axis.text = element_text(size = 12, color = "black"),
+    text = element_text(size = 20, color = "black")
+  ) +
+  labs(x = "Experiment", y = "Proportion", fill = "Cluster") +
+  guides(fill = guide_legend(order = 1, ncol = 1)) 
+```
+
+
+```{r}
+stacked_bp <- \(var){
+  cd <- as.data.frame(colData(sce)) 
+  cd <- cd[cd$experiment == var,]
+  
+  df <- as.data.frame(table(cd$label,cd$timepoint,cd$replicate)) %>%
+    group_by(Var2,Var3) %>%
+    mutate(pct = round(Freq/ sum(Freq),4)) %>%
+    ungroup()
+
+  ggplot(df, aes(x = Var3, y = pct, fill = Var1)) +
+    geom_col() +
+    theme_bw() +
+    scale_fill_manual(values = pal, guide = guide_legend(ncol = 1)) +  # Single-column legend
+    scale_y_continuous(expand = c(0, 0)) +  # Remove empty space at top and bottom
+    theme(
+      panel.grid = element_blank(),
+      aspect.ratio = 4/1,
+      axis.text = element_text(size = 12, color = "black"),
+      text = element_text(size = 20, color = "black")
+    ) +
+    labs(x = "Replicate", y = "Proportion", fill = "Cluster", title = var) +
+    guides(fill = guide_legend(order = 1, ncol = 1)) + 
+    facet_wrap(~Var2)
+}
+
+
+wrap_plots(
+  stacked_bp("ctrl"),
+  stacked_bp("LPS"),
+  stacked_bp("aCD3aCD28"),
+  ncol = 3) +
+  plot_layout(guides = "collect", axis_titles  = "collect")
+
+```
+
+
+## InSituType Profiles
+
+Normalize & log-transform the profiles
+```{r}
+feat <- c("CD3E","CD3G","CD3D","CD8A","CD8B","CD4","IL2RA","FOXP3","CTLA4",
+          "KLRB1","KLRF1","KLRK1","NKG7","NCAM1",
+          "CD19","CD79A","IGHD","IGHG1","IGHM","IGHA1","MZB1",
+          "MS4A1","CSF1R","CD14","CD1C","FCGR3A/B")
+
+plotDots(sce, feat = feat, group = "label", scale = T, center = T) + 
+  coord_flip()
+```
+
+```{r}
+df <- as.data.frame(colData(sce))
+ plot_density(df, "Area.um2", "label", pal, "Features",150)
+```
+
+```{r}
+library(ggridges)
+cd <- as.data.frame(colData(sce))
+qcmet_ridges <- \(var){
+  # Default values to avoid undefined variable error
+  xlab <- ""
+  xmin <- 0
+  xmax <- 1000
+
+  # Assign values based on the `var` argument
+  if(var == "sum") {
+    xlab <- "nCount"; xmin <- 0.1; xmax <- 1000
+  } else if(var == "detected") {
+    xlab <- "nFeature"; xmin <- 0.1; xmax <- 1000
+  } else if(var == "Area.um2") {
+    xlab <- "Cell area (um2)"; xmin <- 10; xmax <- 200
+  }
+
+  # Compute the medians for each sample
+  medians <- cd %>%
+    group_by(sample) %>%
+    summarize(median_var = round(median(!!sym(var), na.rm = TRUE), 0))
+  
+  # Create a named vector of labels
+  labels_vector <- setNames(as.character(medians$median_var), medians$label)
+  
+  # Plot with adjusted y-axis labels
+  ggplot(cd, aes(x = !!sym(var), y = label, fill = label)) +
+    geom_density_ridges() +
+    scale_y_discrete(labels = labels_vector) +  # Adjust y-axis labels here
+    scale_fill_manual(values = pal) +
+    theme_bw() +
+    theme(
+      panel.grid = element_blank(),
+      axis.text = element_text(color = "black", size = 15),
+      axis.title = element_text(color = "black", size = 22),
+      legend.text = element_text(color = "black", size = 10),
+      legend.title = element_text(color = "black", size = 15),
+      axis.ticks.y = element_blank()
+    ) +
+    labs(x = xlab, fill = "sub-STAMP", y = "") +
+    guides(fill = guide_legend(
+      reverse = TRUE,
+      override.aes = list(color = NA)
+    )) +
+    scale_x_log10() 
+}
+
+wrap_plots(
+  qcmet_ridges("sum"),
+  qcmet_ridges("detected"),
+  qcmet_ridges("Area.um2"),
+  ncol = 3) +
+  plot_layout(guides = "collect")
+
+```
+
+
+```{r}
+  xlab <- ""
+  xmin <- 0
+  xmax <- 1000
+  var <- "detected"
+
+library(ggridges)
+library(forcats)  # For fct_reorder
+
+# Step 1: Calculate the median value for each label
+cd <- cd %>%
+  group_by(label) %>%
+  mutate(median_var = round(median(!!sym(var), na.rm = TRUE), 0)) %>%
+  ungroup()
+
+# Step 2: Set 'label' as a factor ordered by decreasing median_var
+cd <- cd %>%
+  mutate(label = fct_reorder(label, median_var, .desc = F))
+
+# Step 3: Create a named vector of labels for y-axis
+labels_vector <- setNames(as.character(cd$median_var), cd$label)
+
+# Plot with adjusted y-axis labels
+ggplot(cd, aes(x = !!sym(var), y = label, fill = label)) +
+  geom_density_ridges() +
+  scale_y_discrete(labels = labels_vector) +  # Adjust y-axis labels here
+  scale_fill_manual(values = pal) +
+  theme_bw() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_text(color = "black", size = 15),
+    axis.title = element_text(color = "black", size = 22),
+    legend.text = element_text(color = "black", size = 10),
+    legend.title = element_text(color = "black", size = 15),
+    axis.ticks.y = element_blank()
+  ) +
+  labs(x = xlab, fill = "sub-STAMP", y = "") +
+  guides(fill = guide_legend(
+    reverse = TRUE,
+    override.aes = list(color = NA)
+  )) +
+  scale_x_log10()
+  
+```
+
+
+
+
+
+
+
+
+
+```{r}
+dir <- glue("{proj_dir}/data/{stamp}/processed")
+qsave(sce, file = glue("{dir}/anno_sce.qs"), nthreads = 8)
+```
+
+```{r}
+sessionInfo()
+```

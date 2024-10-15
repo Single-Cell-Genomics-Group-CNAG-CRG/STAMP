@@ -1,0 +1,119 @@
+---
+title: "milo differential abundances - ctrl vs LPS - Stamp_13a"
+subtitle: "Emanuele Pitino"
+date: "`r Sys.Date()`"
+format: 
+  html:
+    theme: superhero
+    smooth-scroll: true
+    code-fold: true
+    self-contained: true
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+editor: source
+editor_options: 
+  chunk_output_type: console
+execute:
+  echo: true
+  fig-width: 16     
+  fig-height: 12 
+---
+
+### Libraries
+
+```{r}
+suppressPackageStartupMessages({
+library(SingleCellExperiment)
+library(dplyr)
+library(here)
+library(scater)
+library(glue)
+library(qs)
+library(BiocParallel)
+library(BiocNeighbors)
+library(BiocSingular)
+library(data.table)
+library(miloR)
+})
+```
+
+### Data loading
+
+```{r}
+dir <- glue("{here()}")
+source(glue("{dir}/scripts/misc/paths.R"))
+source(glue("{dir}/scripts/misc/BIN.R"))
+```
+
+```{r}
+stamp <- "stamp_13a"
+res_dir <- glue("{proj_dir}/data/{stamp}/processed")
+sce <- qread(glue("{res_dir}/anno_sce_P1.qs"), nthreads = 8)
+sce <- sce[,sce$experiment %in% c("ctrl","LPS")]
+sce <- sce[,sample(colnames(sce),10000)]
+
+sce$experiment <- as.character(sce$experiment)
+sce$timepoint <- as.character(sce$timepoint)
+sce$sample <- as.character(sce$sample)
+```
+
+```{r}
+traj_sce <- sce
+logcounts(traj_sce) <- log(counts(traj_sce) + 1)
+traj_sce <- runPCA(traj_sce, ncomponents=30)
+traj_sce <- runUMAP(traj_sce)
+
+plotUMAP(traj_sce)
+```
+
+# Create milo obj
+```{r}
+traj_milo <- Milo(traj_sce)
+reducedDim(traj_milo, "UMAP") <- reducedDim(traj_sce, "UMAP")
+
+traj_milo
+```
+
+# Construct knn graph
+```{r}
+traj_milo <- buildGraph(traj_milo, k = 10, d = 30)
+```
+
+# Defining representative neighbourhood
+```{r}
+traj_milo <- makeNhoods(traj_milo, prop = 0.1, k = 10, d=30, refined = TRUE)
+```
+
+```{r}
+plotNhoodSizeHist(traj_milo)
+```
+
+
+# Count cells in neighbourhood
+```{r}
+traj_milo <- countCells(traj_milo, meta.data = data.frame(colData(traj_milo)), sample="sample")
+```
+
+```{r}
+head(nhoodCounts(traj_milo))
+```
+
+# Differential abundance testing
+```{r}
+traj_design <- data.frame(colData(traj_milo))[,c("sample", "experiment")]
+traj_design <- distinct(traj_design)
+
+traj_design
+```
+
+```{r}
+traj_milo <- calcNhoodDistance(traj_milo, d=30)
+```
+
+```{r}
+da_results <- testNhoods(traj_milo, design = ~ experiment, design.df = traj_design)
+```
+
+

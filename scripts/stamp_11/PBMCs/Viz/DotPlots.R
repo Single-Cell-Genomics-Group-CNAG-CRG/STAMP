@@ -172,11 +172,16 @@ cd4 <- sce
 lin <- "NK"
 sce <- qread(glue("{proj_dir}/data/{stamp}/{sub}/processed/{lin}/lvl2_sce.qs"), nthreads = 8)
 
+sce$lvl2 <- as.character(sce$lvl2)
+sce$lvl2[sce$lvl2 == "cycling NK"] <- "prolif. NKs"
+sce$lvl2[sce$lvl2 == "CD56hi CD16- NK"] <- "CD56bright CD16- NK"
+sce$lvl2[sce$lvl2 == "CD56low CD16high NK"] <- "CD56dim CD16bright NK"
+
+sce$lvl2 <- factor(sce$lvl2, levels = c( "CD56bright CD16- NK","CD56dim CD16bright NK","prolif. NKs"))
 
 fs <- c("NCAM1","CCR5","GZMK","KLRK1","CXCR3","KLRC1","KLRD1","KLRF1",
         "FCGR3A","KLRB1","IL12RB1","KLRG1","GZMB","GZMA","CX3CR1",
         "EOMES","CD38","STMN1","TOP2A","CD34")
-
 
 
 

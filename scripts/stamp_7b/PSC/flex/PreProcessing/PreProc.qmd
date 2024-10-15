@@ -1,0 +1,147 @@
+---
+title: "PreProcessing - Flex - Stamp 7b - `r params$sample`"
+subtitle: "Emanuele Pitino"
+date: "`r Sys.Date()`"
+format: 
+  html:
+    theme: superhero
+    smooth-scroll: true
+    code-fold: true
+    self-contained: true
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+params:
+  sample: !expr NA
+  npcs: !expr NA
+editor: source
+editor_options: 
+  chunk_output_type: console
+execute:
+  echo: true
+  fig-width: 12     
+  fig-height: 9 
+---
+## Setup
+### Libraries
+```{r}
+suppressPackageStartupMessages({
+library(SingleCellExperiment)
+library(dplyr)
+library(here)
+library(scater)
+library(scuttle)
+library(scran)
+library(data.table)
+library(glue)
+library(qs)
+library(scales)
+})
+```
+
+### Paths
+```{r}
+dir <- glue("{here()}")
+source(glue("{dir}/scripts/misc/paths.R"))
+source(glue("{dir}/scripts/misc/BIN.R"))
+
+sample <- params$sample
+#sample <- "iESC_0h"
+stamp <- "Stamp_7b"
+npcs <- params$npcs
+#stamp <- "stamp_7b"
+dir <- glue("{here()}")
+source(glue("{dir}/scripts/misc/paths.R"))
+source(glue("{dir}/scripts/misc/BIN.R"))
+```
+
+### Load data
+```{r}
+base_dir <- glue("{proj_dir}/data/{stamp}/processed/flex/{sample}")
+
+sce <- qread(glue("{base_dir}//qc_flex_{sample}.qs"), nthreads = 8)
+sce
+```
+
+# Processing
+
+## LogNorm
+```{r}
+sce <- logNormCounts(sce)
+```
+
+## Feature Selection
+```{r}
+set.seed(0010101)
+dec.var <- modelGeneVar(sce, BPPARAM = bp) # model gene var
+hvg <- getTopHVGs(dec.var,fdr.threshold = 1) # select hvg on fdr
+hvg <- hvg[1:4000] # take top 4k hvg by fdr
+metadata(sce)[[glue("hvg_{sample}")]] <- hvg # assign to metadata
+
+dec.var$hvg <- "no" # Assign to dec.var column for plot
+dec.var$hvg[rownames(dec.var) %in% hvg] <- "yes"
+gg_hvg <- plot_hvg(dec.var = dec.var, sub = sample) # plot
+gg_hvg
+```
+
+## PCA
+
+```{r}
+set.seed(101001)
+sce <- fixedPCA(sce, subset.row = hvg)
+
+num_pcs_to_retain <- npcs
+percent.var <- attr(reducedDim(sce), "percentVar")
+
+library(PCAtools)
+chosen.elbow <- findElbowPoint(percent.var)
+chosen.elbow
+# Create a data frame for ggplot
+data <- data.frame(PC = 1:length(percent.var), Variance = percent.var)
+# Plot
+gg_var <- ggplot(data, aes(x = PC, y = Variance)) +
+  geom_point() +
+  xlab("PC") +
+  ylab("Variance explained (%)") +
+  geom_vline(xintercept = num_pcs_to_retain, color = "red") +
+  theme_bw()
+gg_var
+```
+
+```{r}
+reducedDim(sce, "PCA") <-  reducedDim(sce, "PCA")[,1:num_pcs_to_retain]
+wh(6,5)
+gg_pca <- plotPCA(sce, scattermore = TRUE, point_size = 2) + ggtitle("PCA")
+gg_pca
+```
+
+## Run UMAP
+```{r}
+set.seed(123)
+sce <- runUMAP(sce, dimred="PCA", BPPARAM = bp)
+gg_um <- plotReducedDim(sce, "UMAP", scattermore = TRUE, point_size = 2) 
+gg_um
+```
+
+
+# Save plots
+```{r}
+combined <- wrap_plots(gg_var, gg_hvg, gg_pca, gg_um, ncol = 2, nrow = 2) +
+  plot_annotation(tag_levels = "A") + 
+  plot_annotation(title = glue("Flex - Stamp 7b - {sample}"), subtitle = glue("N = {comma(ncol(sce))} cells"))
+
+plotdir <- glue("{plt_dir}/{stamp}/flex/{sample}")
+dir.create(plotdir, showWarnings = F, recursive = T)
+
+pdf(glue("{plotdir}/PreProc_{stamp}_{sample}.pdf"), width = 20, height = 12)
+combined
+dev.off()
+```
+
+# Save data
+```{r}
+outdir <- glue("{proj_dir}/data/{stamp}/processed/flex/{sample}")
+dir.create(outdir, showWarnings = F, recursive = T)
+qsave(sce, glue("{outdir}/proc_sce.qs"), nthreads = 8)
+```

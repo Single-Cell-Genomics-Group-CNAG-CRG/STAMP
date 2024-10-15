@@ -26,7 +26,7 @@ sce
 
 counts <- t(counts(sce))
 
-# normalize by total counts (DOUBLE CHECK THIS IS PROBABLY WRONG, NEED TO SCALE?)
+# average by total counts
 totalcounts <- Matrix::rowSums(counts)  
 norm <- counts / totalcounts
 
@@ -73,7 +73,7 @@ plot(um1, pch = 16, cex = 0.1, col = "dodgerblue4")
 reducedDim(sce,"PCA") <- pc1$x
 reducedDim(sce,"UMAP") <- um1
 
-sce$sample <- factor(sce$sample, levels = c("iPSCs_primordial","endoderm","mesoderm","ectoderm"))
+sce$sample <- factor(sce$sample, levels = c("iPSC_parental","endoderm","mesoderm","ectoderm"))
 # Save plots
 plots_dir <- glue("{plt_dir}/{stamp}/{sample}")
 dir.create(plots_dir, showWarnings = F)

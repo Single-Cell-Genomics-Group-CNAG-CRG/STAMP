@@ -4,8 +4,8 @@
 mkdir -p ./html
 
 # Define an array for the samples and their corresponding "npcs" values
-samples=("iESC_0h" "iESC_6h" "iESC_12h" "iESC_24h" "iESC_48h" "iESC_72h" "iESC_96h" "iESC_120h")
-npcs_values=(15 7 6 6 7 10 10 10)
+samples=("iPSC_parental" "mesoderm" "endoderm" "ectoderm")
+npcs_values=(15 15 15 15)
 
 # Loop through each sample and render the .qmd file
 for i in "${!samples[@]}"; do

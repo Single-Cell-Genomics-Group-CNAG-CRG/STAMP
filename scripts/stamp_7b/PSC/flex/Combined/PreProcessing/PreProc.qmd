@@ -1,0 +1,342 @@
+---
+title: "PreProcessing - Flex iPSC - Stamp 7b - Combined"
+subtitle: "Emanuele Pitino"
+date: "`r Sys.Date()`"
+format: 
+  html:
+    theme: superhero
+    smooth-scroll: true
+    code-fold: true
+    self-contained: true
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+editor: source
+editor_options: 
+  chunk_output_type: console
+execute:
+  echo: true
+  fig-width: 9     
+  fig-height: 6 
+---
+This document provides a comprehensive overview of the preprocessing steps performed on the stamp_7b iPSCs Flex dataset.
+
+Inputs are Sce objects that were previously quality-controlled separately (outliers on quality metrics + doublets flag). 
+The analysis covers the following:
+1. Normalization; 2. Feature selection; 3. Dimensionality reduction, PCA followed by UMAP.
+
+## Setup
+### Libraries
+```{r}
+suppressPackageStartupMessages({
+library(SingleCellExperiment)
+library(dplyr)
+library(here)
+library(scater)
+library(scuttle)
+library(scran)
+library(data.table)
+library(glue)
+library(qs)
+library(scales)
+})
+```
+
+### Paths
+```{r}
+dir <- glue("{here()}")
+source(glue("{dir}/scripts/misc/paths.R"))
+source(glue("{dir}/scripts/misc/BIN.R"))
+
+sample <- "combined"
+stamp <- "Stamp_7b"
+#npcs <- params$npcs
+```
+
+### Load data
+```{r}
+dirs <- list.dirs(glue("{proj_dir}/data/{stamp}/processed/flex")) # get dirs
+dirs <- dirs[grepl("^iPSC_|(mesoderm|ectoderm|endoderm)$", basename(dirs))]
+sce <- SingleCellExperiment() # init sce obj
+
+sce <- list()
+
+sce_list <- lapply(dirs, function(dir) {
+  qread(glue("{dir}/clust_sce.qs"), nthreads = 8)
+})
+
+# Apply modifications to each element in sce_list
+sce_list <- lapply(sce_list, function(tmp) {
+  reducedDims(tmp)$PCA <- NULL                # Remove PCA
+  reducedDims(tmp)$UMAP <- NULL               # Remove UMAP
+  assays(tmp)$logcounts <- NULL               # Remove logcounts
+  colnames(tmp) <- paste0(tmp$sample, "_", colnames(tmp))  # Rename barcodes
+  rowData(tmp)$scDblFinder.selected <- NULL   # Remove scDblFinder stats from rowData
+  metadata(tmp)$scDblFinder.stats <- NULL     # Remove scDblFinder stats from metadata
+  metadata(tmp)$scDblFinder.threshold <- NULL # Remove scDblFinder threshold from metadata
+  tmp  # Return the modified object
+})
+
+sce <- do.call(cbind,sce_list)
+
+rm(sce_list)
+gc()
+```
+
+# Processing
+
+## LogNorm
+```{r}
+#sce <- sce[,sample(colnames(sce),1000)]
+sce <- logNormCounts(sce)
+```
+
+## Feature Selection
+
+Features were selected independently for each library. In this step, we will compute the intersection of these features across all libraries and use them in downstream analyses.
+```{r}
+#hvg_list <- metadata(sce)[grep("hvg_", names(metadata(sce)), value = TRUE)]
+#hvg_list <- lapply(hvg_list, function(x) x[1:2000])
+#hvg <- unique(unlist(hvg_list))
+#metadata(sce)$hvg_combined <- hvg
+
+#hvg_list <- metadata(sce)[grep("hvg_", names(metadata(sce)), value = TRUE)]
+#hvg <- sapply(hvg_list, \(.) rownames(sce) %in% .)
+#sum(rowSums(hvg) > 2)
+
+set.seed(0010101)
+dec.var <- modelGeneVar(sce, BPPARAM = bp) 
+hvg <- getTopHVGs(dec.var)
+hvg <- hvg[1:4000]
+length(hvg)
+dec.var$hvg <- "no" # Assign to dec.var column for plot
+dec.var$hvg[rownames(dec.var) %in% hvg] <- "yes"
+gg_hvg <- plot_hvg(dec.var = dec.var, sub = sample) # plot
+gg_hvg
+```
+
+## PCA
+
+```{r}
+set.seed(101001)
+sce <- fixedPCA(sce, subset.row = hvg)
+
+num_pcs_to_retain <- 10
+percent.var <- attr(reducedDim(sce), "percentVar")
+
+# Create a data frame for ggplot
+data <- data.frame(PC = 1:length(percent.var), Variance = percent.var)
+# Plot
+gg_var <- ggplot(data, aes(x = PC, y = Variance)) +
+  geom_point() +
+  xlab("PC") +
+  ylab("Variance explained (%)") +
+  geom_vline(xintercept = num_pcs_to_retain, color = "red") +
+  theme_bw()
+gg_var
+```
+
+```{r}
+reducedDim(sce, "PCA") <-  reducedDim(sce, "PCA")[,1:num_pcs_to_retain]
+wh(6,5)
+gg_pca <- plotPCA(sce, scattermore = TRUE, point_size = 2) + ggtitle("PCA")
+gg_pca
+```
+
+## Run UMAP
+```{r}
+set.seed(123)
+sce <- runUMAP(sce, dimred="PCA", BPPARAM = bp)
+gg_um <- plotReducedDim(sce, "UMAP", scattermore = TRUE, point_size = 2) 
+gg_um
+```
+
+
+## Add Library information
+```{r}
+sce$library <- "B3"
+```
+
+## PCA - time points
+
+```{r}
+df <- as.data.frame(colData(sce)) # cd
+pca <- reducedDim(sce,"PCA") # pc
+df <- cbind(df,pca) # merge
+df <- df[sample(nrow(df)), ] # shuffle
+
+pal <- Polychrome::createPalette(n_distinct(sce$sample), c("#FBB4AE", "#B3CDE3", "#CCEBC5"))
+names(pal) <- unique(sce$sample)
+
+df$sample <- factor(df$sample, levels = c("iPSC_parental","mesoderm","ectoderm","endoderm"))
+
+ggplot(df, aes(x = PC1, y = PC2, color = sample)) +
+  ggrastr::rasterise(geom_point(shape = 16, size = 0.1), dpi = 1000) +
+  theme_bw() +
+  scale_color_manual(values = pal) +
+  theme(
+    text = element_text(size = 25, color = "black"),
+    axis.text = element_text(size = 20, color = "black"),
+    legend.text = element_text(size = 12),
+    legend.title = element_text(size = 18),
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank()
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 3))) +
+  labs(x = "PC1", y = "PC2", color = "Sample") +
+  coord_equal()
+```
+
+# Clustering on un-integrated PCA
+
+## Build snn graph
+```{r}
+snn <- buildSNNGraph(sce, type = "jaccard", use.dimred="PCA", BPPARAM = bp)
+```
+
+## Run louvain 
+```{r}
+clusters <- igraph::cluster_louvain(snn, resolution = 0.2)
+```
+
+```{r}
+sce$label <- as.character(clusters$membership) # assign labels
+pal <- Polychrome::createPalette(n_distinct(sce$label), c("#FBB4AE", "#B3CDE3", "#CCEBC5"))
+names(pal) <- unique(sce$label)
+```
+
+## Clusters numbers
+
+```{r, fig.width= 12, fig.height= 6}
+df <- as.data.frame(colData(sce))
+df <- as.data.frame(table(df$label))  %>%
+        mutate(pct = round(Freq/sum(Freq),2))
+df$Var1 <- factor(df$Var1, levels = df$Var1[order(-df$Freq)])
+
+ggplot(df, aes(x = Var1, y = Freq, fill = Var1)) + 
+  geom_col() + 
+  geom_text(aes(label = Freq), vjust = -0.5, size = 3) +
+  scale_fill_manual(values = pal) + 
+  theme_bw() +
+  theme(text = element_text(size = 15, color = "black"),
+        axis.text = element_text(size = 10, color = "black")) +
+  labs(x = "Cluster", y = "nCells", fill = "Cluster")
+```
+
+## Clusters proportions per sample
+```{r, fig.width= 12, fig.height= 6}
+df <- as.data.frame(table(sce$sample,sce$label)) %>%
+      group_by(Var1) %>%
+      mutate(Proportion = round((Freq / sum(Freq)) * 100, 2))
+
+df$Var1 <- factor(df$Var1, levels = c("iPSC_parental","endoderm","mesoderm","ectoderm"))
+ggplot(df, aes( x = Var1 , y = Proportion, fill = Var2)) + 
+  geom_col() +
+  scale_fill_manual(values = pal) +
+  theme_bw() +
+  theme(text = element_text(size = 15, color = "black"),
+        axis.text = element_text(size = 15, color = "black"),
+        panel.grid = element_blank()) +
+  labs(x = "Sample", fill = "Cluster")
+```
+
+## QC metrics per cluster
+
+```{r, fig.width= 12, fig.height= 6}
+df <- as.data.frame(colData(sce))
+
+# reorder by mean ncount
+df$label <- factor(df$label, levels = df %>% 
+  group_by(label) %>% 
+  summarise(mean_sum = mean(sum)) %>% 
+  arrange(-mean_sum) %>% 
+  pull(label))
+
+# Create the plot
+ggplot(df, aes(x = label, y = sum)) + 
+  geom_jitter(shape = 16, alpha = 0.8, size = 0.8, aes(color = log(detected))) +
+  geom_boxplot(alpha = 0.8, outlier.shape = NA, fill = NA) +
+  scale_color_viridis_c() +
+  scale_y_log10() +
+  labs(x = "Cluster", y = "nCount", color = "Log(nFeature)") + 
+  theme_bw() +
+  theme(text = element_text(size = 15, color = "black"),
+        axis.text = element_text(size = 10, color = "black"),
+        panel.grid = element_blank())
+```
+
+
+## nFeature/nCount
+```{r}
+df <- as.data.frame(colData(sce))
+
+ndbl <- sum(df$scDblFinder.class == "doublet")
+nsgl <- sum(df$scDblFinder.class == "singlet")
+
+pctdbl <- round(ndbl/(ndbl+nsgl)*100,2)
+
+df <- df[sample(rownames(df)),]
+ggplot(df, aes(x = detected, y = sum, color = scDblFinder.class)) +
+  geom_point(shape = 16, size = 0.4) +
+  scale_color_manual(values = c("singlet" = "green4", "doublet" = "red4")) +
+            labs(subtitle = glue("Doublets: {pctdbl}%") ,x = "nFeature", y = "nCount", color = "scDblFinder", title = "nFeat vs nCount") + 
+            theme_bw() +
+            theme(text = element_text(size = 15, color = "black"),
+                  axis.text = element_text(size = 10, color = "black")) +
+            guides(color = guide_legend(override.aes = list(size = 3)))
+```
+
+## Doublets per cluster
+```{r}
+df <- as.data.frame(colData(sce))
+df <- as.data.frame(table(df$label, df$scDblFinder.class))
+
+# Calculate the percentage and reorder by 'singlet' percentage
+df <- df %>%
+  group_by(Var1) %>%
+  mutate(pct = round(Freq / sum(Freq), 2)) %>%
+  ungroup()
+
+# Calculate the percentage of 'singlets' for reordering
+singlet_pct <- df %>% 
+  filter(Var2 == "singlet") %>% 
+  select(Var1, pct)
+
+# Reorder Var1 by the percentage of 'singlets'
+df$Var1 <- factor(df$Var1, levels = singlet_pct$Var1[order(singlet_pct$pct, decreasing = TRUE)])
+
+# Make Var2 a factor to control the order in the legend and plot
+df$Var2 <- factor(df$Var2, levels = c("doublet", "singlet"))
+
+# Create the plot
+ggplot(df, aes(x = Var1, y = pct, fill = Var2)) +
+  scale_fill_manual(values = c("singlet" = "green4", "doublet" = "red4")) +
+  geom_col(position = "stack") + 
+  labs(x = "Cluster", y = "Proportion", fill = "scDblFinder", title = "Doublets % per Cluster") + 
+  theme_bw() +
+  theme(text = element_text(size = 15, color = "black"),
+        axis.text = element_text(size = 10, color = "black")) + 
+  guides(color = guide_legend(override.aes = list(size = 3)))
+```
+
+# Save plots
+```{r}
+combined <- wrap_plots(gg_var, gg_hvg, gg_pca, gg_um, ncol = 2, nrow = 2) +
+  plot_annotation(tag_levels = "A") + 
+  plot_annotation(title = glue("Flex - Stamp 7b - iPSCs - {sample}"), subtitle = glue("N = {comma(ncol(sce))} cells"))
+
+plotdir <- glue("{plt_dir}/{stamp}/flex/iPSC/{sample}")
+dir.create(plotdir, showWarnings = F, recursive = T)
+
+pdf(glue("{plotdir}/PreProc_{stamp}_{sample}.pdf"), width = 20, height = 12)
+combined
+dev.off()
+```
+
+# Save data
+```{r}
+outdir <- glue("{proj_dir}/data/{stamp}/processed/flex/iPSC/{sample}")
+dir.create(outdir, showWarnings = F, recursive = T)
+qsave(sce, glue("{outdir}/proc_sce.qs"), nthreads = 8)
+```

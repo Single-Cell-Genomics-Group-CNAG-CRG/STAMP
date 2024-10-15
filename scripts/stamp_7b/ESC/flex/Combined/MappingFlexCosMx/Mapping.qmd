@@ -373,3 +373,55 @@ ggplot(df, aes(x = Var3, y = Freq, fill = Var1)) +
 ```
 
 
+## Hierarchical clustering on mean-aggregated lognormcounts
+```{r}
+sce$anno_tech <- paste0(sce$anno,"_",sce$tech)
+lgc <- assay(sce, "logcounts")
+cd <- as.data.frame(colData(sce))
+colnames(lgc) <- cd[colnames(lgc), "anno_tech"]
+```
+
+```{r}
+# Transpose the matrix to switch columns and rows
+lgc_t <- t(lgc)
+# Sum the rows (original columns) that have the same name
+agg_sums <- rowsum(lgc_t, group = rownames(lgc_t))
+# Count how many times each column name appears
+counts <- table(rownames(lgc_t))
+# Calculate the mean by dividing the sums by the counts
+agg_means <- sweep(agg_sums, 1, counts, "/")
+# Transpose back to the original orientation
+lgc_aggregated <- t(agg_means)
+```
+
+```{r}
+dist_matrix <- dist(lgc_aggregated, method = "euclidean")
+hc <- hclust(dist_matrix, method = "complete")
+```
+
+
+```{r}
+library(ggplot2)
+library(ggdendro)  
+
+ggplot() +
+  geom_segment(data = dend_data$segments, 
+               aes(x = x, y = y, xend = xend, yend = yend)) +
+  geom_text(data = dend_data$labels, 
+            aes(x = x, y = y, label = label), 
+            angle = 0, color = "black", hjust = 0.5, vjust = 1, size = 3) +
+  theme_bw() +
+  labs(title = "Hierarchical Clustering; mean-aggregated logNormCounts",
+       x = "",
+       y = "") +
+  theme(
+    # Rotate x-axis text for better readability
+    axis.text.x =element_blank(),
+    axis.text.y = element_blank(), 
+    axis.ticks = element_blank(),
+    panel.grid = element_blank()
+  )
+```
+
+
+

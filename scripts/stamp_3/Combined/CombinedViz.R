@@ -29,12 +29,17 @@ cd <- lapply(cd, function(x) {
 cd <- do.call(rbind,cd)
 
 #  General palette
+
+cd$label[cd$label == "SKBR3"] <- "SK-BR-3"
+cd$label[cd$label == "MCF7"] <- "MCF-7"
+
 pal <- Polychrome::createPalette(26,c("#99FFFF", "#FF99FF", "#FFFF99"))
 val <- unique(cd$label)
 names(pal) <- val
 
 cd$sample <- recode(cd$sample, "c100" = "100 C", "c250" = "250 C", "c500" = "500 C", "c1000" = "1000 C",
                     "c20k" = "20K C", "n20k" = "20K N")
+
 
 
 psamp <- Polychrome::createPalette(10, c("#a6dba0", "#c2a5cf", "#f4a582"))
@@ -60,15 +65,22 @@ df$sample <- factor(df$sample, levels = c("20K C","20K N","1000 C","500 C","250 
 gg_pos <- ggplot(df, aes(x = CenterX_global_px, y = CenterY_global_px, color = sample)) + 
   ggrastr::rasterise(geom_point(shape = 16, size = 0.8), dpi = 800) +
   scale_color_manual(values = psamp) +
-  theme_bw() + 
-  scale_x_continuous(labels = scientific_10) +
-  scale_y_continuous(labels = scientific_10) +
-  labs(color = "Square", x = "x_px", y = "y_px") +
-  guides(color = guide_legend(override.aes = list(size = 4)))
+  theme_bw() +
+  labs(color = "sub-STAMP", x = "x (px)", y = "y (px)") +
+  guides(color = guide_legend(override.aes = list(size = 5))) + 
+    theme(text = element_text(color = "black"),
+          axis.text = element_text(color = "black"),
+          axis.title = element_text(size = 20),
+          legend.title = element_text(size = 16),
+          legend.text = element_text(size = 14),
+          panel.grid = element_blank()) +
+    coord_equal()
 
-dir <- glue("{proj_dir}/figures/fig2/rds")
-dir.create(dir, showWarnings = F)
-saveRDS(gg_pos, file = glue("{dir}/gg_pos.rds"))
+dir <- glue("/Users/emanuelepitino/Desktop/fig2")
+
+pdf(glue("{dir}/gg_pos.pdf"), width = 5, height = 4)
+gg_pos
+dev.off()
 
 # CELL NUMBERS
 ####### ####### ####### ####### ####### ####### ####### ####### ####### ####### #######
@@ -77,19 +89,21 @@ df <- as.data.frame(table(cd$sample, cd$label)) %>%
   group_by(Var1) %>%
   mutate(Proportion = round((Freq / sum(Freq)) * 100, 2))
 
-gg_cnumb <- ggplot(df, aes(x = Var1, y = Proportion)) + 
+gg_prop <- ggplot(df, aes(x = Var1, y = Proportion)) + 
   geom_col(aes(fill = Var2), alpha = 0.9) +
   scale_fill_manual(values = pal) +
   theme_bw() +
   theme(text = element_text(size = 25, color = "black"),
-        axis.text = element_text(size = 20, color = "black"),
+        axis.text = element_text(size = 18,color = "black"),
+        axis.text.x = element_text( angle = 45, hjust = 1), 
         legend.position = "right",
         panel.grid = element_blank()) +
-  labs(fill = "Cell Type", y = "Proportion") +
-  labs(x = "Sample", fill = "Cell Type") 
-gg_cnumb
-
-saveRDS(gg_cnumb, file = glue("{dir}/gg_cnumb.rds"))
+  labs(fill = "Cluster ID", y = "Proportions", x= "")  +
+  scale_y_continuous(expand = c(0, 0))
+  
+  pdf(glue("{dir}/gg_prop.pdf"), width = 5, height = 6)
+  gg_prop
+  dev.off()
 ####### ####### ####### ####### ####### ####### ####### ####### ####### ####### #######
 
 # CORRELATION OF CELL NUMBERS
@@ -103,66 +117,79 @@ df <- df %>%
   mutate(pct_diff = (round((Freq/InputCells),2))*100)
 
 
-ggplot(df, aes(x = Var1, y = pct_diff, fill = Var1)) +
+gg_cnumb <- ggplot(df, aes(x = Var1, y = pct_diff, fill = Var1)) +
   geom_col() +
   scale_fill_manual(values = psamp) +
-  geom_text(aes(label = Freq), vjust = -0.5, size = 2.5, color = "black") +
+  geom_text(aes(label = Freq), vjust = -0.5, size = 3, color = "black") +
   theme_bw() + 
   theme(panel.grid = element_blank()) +
-  labs(x = "sub-STAMP", y = "% recovered cells") + 
+  labs(x = "",y = "% recovered cells") + 
   theme(legend.position = "none", 
         text = element_text(size = 20, color = "black"),
         axis.text = element_text(size = 18, color = "black")) +
-  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, color = "black")) +
+  scale_y_continuous(expand = c(0,5))
 
 
 
 
+pdf(glue("{dir}/gg_cnumb.pdf"), width = 3, height = 6)
+gg_cnumb
+dev.off()
 
+pdf(glue("{dir}/b_c.pdf"), width = 10, height = 6)
+wrap_plots(
+  gg_cnumb,
+  gg_prop,
+  nrow = 1
+) 
+dev.off()
 
-
-
-saveRDS(gg_corr, file = glue("{dir}/gg_corr.rds"))
 ####### ####### ####### ####### ####### ####### ####### ####### ####### ####### #######
 
 # GENE COUNTS & Features
 ####### ####### ####### ####### ####### ####### ####### ####### ####### ####### #######
 df <- cd
 # plot function
-create_boxplot <- function(df, var_name, title, ylab) {
-  # Dynamically calculate the median for each sample and create labels
-  labels <- setNames(
-    lapply(unique(df$sample), function(sample) {
-      median_value <- round(median(df[[var_name]][df$sample == sample]), 0)
-      glue("{median_value}")
-    }),
-    unique(df$sample)
-  )
+create_boxplot <- function(df, var_name, title, ylab, log) {
+  # Dynamically calculate the median and max for each sample
+  stats <- df %>%
+    group_by(sample) %>%
+    summarize(median_value = median(!!sym(var_name)),
+              max_value = max(!!sym(var_name)))
   
   # Create the plot
-  ggplot(df, aes(x = sample, y = !!sym(var_name), color = sample)) +
-    geom_boxplot(aes(fill = sample), alpha = 0.1) + # Set alpha for fill only
+  p <- ggplot(df, aes(x = sample, y = !!sym(var_name), color = sample)) +
+    ggrastr::rasterise(geom_boxplot(aes(fill = sample), alpha = 0.5, outlier.size = 0.1), dpi = 800) +  # Set alpha for fill only
     theme_bw() +
-    theme(panel.grid = element_blank()) +
-    scale_color_manual(values = psamp, labels = labels) +
+    scale_color_manual(values = psamp) +
     scale_fill_manual(values = psamp) +
-    labs(color = title) +
-    labs(y = ylab, color = "Median") +
-    guides(fill = "none") 
+    labs(y = ylab, x = "", color = "Median") +
+    guides(color = "none", fill = "none") +  # Remove the legend
+    geom_text(data = stats, aes(x = sample, y = max_value, label = round(median_value, 0)),
+              vjust = -0.5, size = 5, color = "black") +  # Place median above the max value
+    theme(panel.grid = element_blank(),
+          axis.text.x = element_text(angle = 45, hjust = 1, color = "black", size = 16),
+          axis.text = element_text(color ="black", size = 16),
+          text = element_text(color = "black", size = 20))
+  
+  if(log == TRUE) {p <- p + scale_y_log10()}
+  return(p)
 }
 
-gg_sum <- create_boxplot(df, "sum", "Sample", "nCount")
-gg_feat <- create_boxplot(df, "detected", "Sample", "nFeature")
-gg_area <- create_boxplot(df, "Area.um2", "Sample", "Area.um2")
+# Example usage
+gg_sum <- create_boxplot(df, "sum", "Sample", "nCount", log = TRUE)
+gg_feat <- create_boxplot(df, "detected", "Sample", "nFeature", log = TRUE)
+gg_area <- create_boxplot(df, "Area.um2", "Sample", "Cell area (um2)", log = FALSE)
 
-gg_sum
-gg_feat
-gg_area
 
-# Save
-saveRDS(gg_sum, file = glue("{dir}/gg_sum.rds"))
-saveRDS(gg_area, file = glue("{dir}/gg_area.rds"))
-saveRDS(gg_feat, file = glue("{dir}/gg_feat.rds"))
+pdf(glue("{dir}/gg_cfa.pdf"), width = 12, height = 6)
+wrap_plots(
+  gg_sum,
+  gg_feat,
+  gg_area,
+  nrow = 1)
+dev.off()
 
 ####### ####### ####### ####### ####### ####### ####### ####### ####### ######## 
 ####### ####### ####### ####### ####### ####### ####### ####### ####### ########
@@ -195,12 +222,27 @@ df <- merge(c, n, by = "gene", all = TRUE)
 
 
 gg_corr <- ggplot(df, aes(x = Cells, y = Nuclei)) + 
-  ggrastr::rasterize(geom_point(shape = 16, size = 0.9, alpha = 0.8), dpi = 300) +
-  ggpubr::stat_cor(method = "pearson", label.x = -3, label.y = 50, size = 5) + 
+ggrastr::rasterise(geom_point(shape = 16, size = 3, alpha = 0.8), dpi = 800) +
+  ggpubr::stat_cor(method = "pearson", label.x = -3, label.y = 50, size = 7) + 
   geom_smooth(method = "lm", color = "red") +
   theme_bw() +
-  theme(panel.grid =  element_blank()) +
-  labs(x ="Mean counts/gene - 20K cells", y ="Mean counts/gene - 20K nuclei")
+  labs(x ="Mean counts/gene - 20K cells", y ="Mean counts/gene - 20K nuclei") +
+  theme(panel.grid =  element_blank(),
+        text = element_text(size = 20, color = "black"),
+        axis.text = element_text(size = 18, color = "black"))
+  
 
+pdf(glue("{dir}/gg_corr.pdf"), width = 5, height = 5)
+gg_corr
+dev.off()
 
-saveRDS(gg_corr, file = glue("{dir}/gg_gene_corr.rds"))
+pdf(glue("{dir}/d_e.pdf"), width = 18, height = 6)
+wrap_plots(
+  gg_sum,
+  gg_feat,
+  gg_area,
+  gg_corr,
+  ncol = 4) + 
+  plot_layout(widths = c(1,1,1,1.5))
+dev.off()
+ 

@@ -1088,6 +1088,34 @@ scientific_10 <- function(x) {
   parse(text=gsub("e\\+?0?", " %*% 10^", scales::scientific_format()(x)))
 }
 ###############################################################################
+extr_thr <- function(df){
+  return <- list()
+  lower <- round(attr(df, 'thresholds')['lower'],0)
+  higher <- round(attr(df, 'thresholds')['higher'],0)
+  return(c(lower,higher))
+}
 
+# Same as extr_thr, but to use when setting batch in isOutlier
+extr_thr_batch <- function(df,batch){
+  return <- list()
+  lower <- round(attr(df, 'thresholds')['lower',batch],0)
+  higher <- round(attr(df, 'thresholds')['higher',batch],0)
+  return(c(lower,higher))
+}
 
-
+###############################################################################
+pal_s13a <- c(
+  ctrl_4h_r2        = "#1F78B4",
+  LPS_4h_r2         = "#33A02C",
+  aCD3aCD28_4h_r2   = "#E31A1C",
+  ctrl_4h_r1        = "#A6CEE3",
+  LPS_4h_r1         = "#B2DF8A",
+  aCD3aCD28_4h_r1   = "#FB9A99",
+  ctrl_24h_r2       = "#FF7F00",
+  LPS_24h_r2        = "#6A3D9A",
+  aCD3aCD28_24h_r2  = "#B15928",
+  ctrl_24h_r1       = "#FDBF6F",
+  LPS_24h_r1        = "#CAB2D6",
+  aCD3aCD28_24h_r1  = "#FFFF99"
+)
+###############################################################################

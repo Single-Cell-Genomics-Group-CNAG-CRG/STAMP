@@ -1,0 +1,221 @@
+---
+title: "QC - Flex - Stamp 7b - `r params$sample`"
+subtitle: "Emanuele Pitino"
+date: "`r Sys.Date()`"
+format: 
+  html:
+    theme: superhero
+    smooth-scroll: true
+    code-fold: true
+    self-contained: true
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+params:
+  sample: !expr NA
+editor: source
+editor_options: 
+  chunk_output_type: console
+execute:
+  echo: true
+---
+
+## Libraries
+```{r}
+suppressPackageStartupMessages({
+library(SingleCellExperiment)
+library(dplyr)
+library(here)
+library(scater)
+library(scuttle)
+library(data.table)
+library(glue)
+library(qs)
+library(scales)
+})
+```
+
+```{r}
+dir <- glue("{here()}")
+source(glue("{dir}/scripts/misc/paths.R"))
+source(glue("{dir}/scripts/misc/BIN.R"))
+
+sample <- params$sample
+#sample <- "iESC_6h"
+stamp <- "stamp_7b"
+dir <- glue("{here()}")
+source(glue("{dir}/scripts/misc/paths.R"))
+source(glue("{dir}/scripts/misc/BIN.R"))
+```
+
+```{r}
+# Define the base directory to search
+base_dir <- glue("{proj_dir}/data/{stamp}/raw/flex_sc/results/filtered_feature_bc_matrix/")
+
+# Find the folder that ends with the value in `sample`
+dir <- list.dirs(base_dir, recursive = FALSE, full.names = TRUE) %>%
+  .[grepl(paste0(sample, "$"), .)]
+```
+
+## Load data
+
+```{r}
+mtx <- Matrix::readMM(glue("{dir}/matrix.mtx.gz"))
+mtx <- as(mtx, "dgCMatrix") # convert to dgCMatrix
+bc <- fread(glue("{dir}/barcodes.tsv.gz"), header = F)
+feat <- fread(glue("{dir}/features.tsv.gz"), header = F)
+rownames(mtx) <- feat$V2
+colnames(mtx) <- bc$V1
+```
+
+```{r}
+sce <- SingleCellExperiment(assays = list(counts = mtx), rowData = feat)
+sce$sample <- sample
+```
+
+## Calculate qc metrics
+
+```{r}
+is.mito <- grep("^MT-",rownames(rowData(sce)), value = T)
+sce <- addPerCellQCMetrics(sce, subsets=list(Mito=is.mito))
+sce
+```
+
+### Find outliers
+
+```{r}
+# Sum outliers
+discard_sum <- isOutlier(sce$sum, 
+                         type = "lower", 
+                         log = TRUE,
+                         nmads = 3)
+# Detected outliers
+discard_detected <- isOutlier(sce$detected, 
+                         type = "lower", 
+                         log = TRUE,
+                         nmads = 3)
+# Detected outliers
+discard_mito <- isOutlier(sce$subsets_Mito_percent, 
+                         type = "higher", 
+                         log = F,
+                         nmads = 12)
+```
+
+
+```{r}
+extr_thr <- function(df){
+return <- list()
+lower <- round(attr(df, 'thresholds')['lower'],0)
+higher <- round(attr(df, 'thresholds')['higher'],0)
+return(c(lower,higher))
+}
+```
+
+```{r}
+gg_hist <- function(df, outliers, var, title) {
+  sum_thr <- extr_thr(outliers)
+  median_val <- round(median(df[[var]]), 2)
+
+  plot <- ggplot(df, aes_string(x = var)) + 
+              geom_histogram(bins = 500)  + 
+              geom_vline(xintercept = sum_thr, linetype = "dashed", color = "red") + 
+              theme(axis.text = element_text(size = 15, color = "black")) + 
+              labs(title = title, 
+                     subtitle = glue::glue("Median: {median_val}; Lower thr: {sum_thr[1]}; Higher thr: {sum_thr[2]}")) + 
+              scale_x_log10()
+   return(plot)
+}
+```
+
+```{r}
+suppressWarnings({
+df <- as.data.frame(colData(sce))
+
+gg_qc_metrics <- wrap_plots(
+                gg_hist(df, discard_sum, "sum", "Counts"),
+                gg_hist(df, discard_detected, "detected", "Features"),
+                gg_hist(df, discard_mito, "subsets_Mito_percent", "Mito%"),
+                ncol = 1)
+})
+```
+
+# Filter
+
+```{r}
+filt <- sce[,sce$sum > as.numeric(attr(discard_sum, "threshold")["lower"]) &
+             sce$sum < as.numeric(attr(discard_sum, "threshold")["higher"]) &
+             sce$detected > as.numeric(attr(discard_detected, "threshold")["lower"]) &
+             sce$detected < as.numeric(attr(discard_detected, "threshold")["higher"]) &
+             sce$subsets_Mito_percent < as.numeric(attr(discard_mito, "threshold")["higher"])]
+```
+
+## QC histograms
+```{r, fig.width=10, fig.height=12}
+suppressMessages(suppressWarnings({
+  gg_qc_metrics <- gg_qc_metrics +
+    plot_annotation(
+      title = glue("Quality control - Flex - {stamp} - {sample}"),
+      subtitle = glue("Raw: {number(ncol(sce), big.mark = '.')} C; Filtered: {number(ncol(filt), big.mark = '.')} C"),
+      theme = theme(
+        plot.title = element_text(size = 20, face = "bold"),  # Adjust title size
+        plot.subtitle = element_text(size = 16)              # Adjust subtitle size
+      )
+    )
+  gg_qc_metrics
+}))
+```
+
+## Mito% vs nCount
+```{r, fig.width=10,fig.height=8}
+sum_thr <- round(attr(discard_sum, "threshold")["lower"],2)
+mt_thr <- round(attr(discard_mito, "threshold")["higher"],2)
+
+gg_mito_count_func <- function(sc, sub){
+  df <- as.data.frame(colData(sc))
+  df$goodq <- "no"
+  df$goodq[df$sum > sum_thr] <- "yes"
+  df$goodq[df$subsets_Mito_percent < mt_thr & df$sum > sum_thr] <- "yes"
+  
+  df$goodq <- factor(df$goodq, levels = c("yes","no"))
+  
+  plt <- gg_mito_count <- ggplot(df, aes(x = subsets_Mito_percent, y = sum, color = goodq)) +
+            scale_color_manual(values = c("yes" = "green4", "no" = "red4")) +
+            geom_point(shape = 16, size = 0.5) +
+            geom_vline(xintercept = mt_thr, color = "red", linetype = "dashed") + 
+            geom_hline(yintercept = sum_thr, color = "red", linetype = "dashed") +
+            labs(subtitle = sub,x = "Mito%", y = "nCount", color = "QCPass", title = "Mito% vs nCount") + 
+            theme_bw() +
+            theme(text = element_text(size = 15, color = "black"),
+                  axis.text = element_text(size = 10, color = "black")) +
+            guides(color = guide_legend(override.aes = list(size = 3)))
+  return(plt)
+}
+gg_mito_count_raw <- gg_mito_count_func(sce,"raw obj")
+gg_mito_count_filt <- gg_mito_count_func(filt,"filt obj")
+
+gg_mito_count_raw
+gg_mito_count_filt
+```
+
+## Save plots
+```{r}
+pltdir <- glue("{plt_dir}/{stamp}/flex/{sample}")
+dir.create(pltdir, showWarnings = F, recursive = T)
+
+pdf(glue("{pltdir}/QC1_flex_{stamp}_{sample}.pdf"), width = 15, height = 4)
+gg_qc_metrics
+dev.off()
+
+pdf(glue("{pltdir}/QC1_MitoCount_flex_{stamp}_{sample}.pdf"), width = 10, height = 6)
+gg_mito_count_raw
+gg_mito_count_filt
+dev.off()
+```
+
+## Save sce
+```{r}
+outdir <- glue("{proj_dir}/data/{stamp}/processed/flex/{sample}")
+dir.create(outdir, showWarnings = F, recursive = T)
+qsave(filt, file = glue("{outdir}/qc_flex_{sample}.qs"), nthreads = 8)
+```

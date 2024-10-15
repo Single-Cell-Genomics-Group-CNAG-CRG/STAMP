@@ -18,66 +18,117 @@ source(glue("{here()}/scripts/misc/BIN.R"))
 
 cd <- cd[cd$stamp != "stamp_9",]
 sce <- sce[,sce$stamp != "stamp_9"]
-# common theme
-common_theme <- theme(text = element_text(color = "black", family = "Times New Roman", size = 20),
-                      axis.text = element_text(color = "black", family = "Times New Roman", size = 18))
+cd$replicate[cd$stamp == "stamp_11"] <- "replicate 1"
+cd$replicate[cd$stamp == "stamp_12"] <- "replicate 2"
 
-# Split by stamp and substamp & average by total cells
-stamp <- unique(cd$stamp)
-sub <- unique(cd$sub)
-for(st in stamp){
-  for(s in sub){
-    tmp <- sce[,sce$stamp == st & sce$sub == s]
-    tmp <- assay(tmp,"counts") 
-    tmp <- rowSums(tmp) / ncol(tmp)
-    assign(paste0(st,"_",s),tmp)
-  }
-}
+sce$replicate[sce$stamp == "stamp_11"] <- "replicate 1"
+sce$replicate[sce$stamp == "stamp_12"] <- "replicate 2"
 
-mcf7 <- data.frame(stamp_11 = stamp_11_MCF7, stamp_12= stamp_12_MCF7)
-skbr3 <-  data.frame(stamp_11 = stamp_11_SKBR3, stamp_12 = stamp_12_SKBR3)
+pal <- Polychrome::createPalette(26, c("#A3B8CC", "#550A46"))
+val <- unique(cd$replicate)
+names(pal) <- val
 
-df <- cbind(mcf7,skbr3)
+df <- as.data.frame(table(cd$sub,cd$replicate))
 
-# Generate all unique pairwise combinations
+gg_cnumb <- ggplot(df, aes(x = Var1, y = Freq, fill = Var2)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.5) +
+  geom_text(aes(label = Freq), 
+            position = position_dodge(width = 0.8), 
+            vjust = -0.5, 
+            size = 4) +  
+  scale_fill_manual(values = pal) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        text = element_text(color = "black"),
+        axis.title = element_text(size = 20),
+        legend.text = element_text(size = 15),
+        legend.title = element_blank(),
+        axis.text = element_text(color = "black", size = 16),
+        legend.position = "top") +
+  labs(x = "", y = "# Cells", fill = "Replicate")
+
+
+create_boxplot <- function(df, var_name, title, ylab, log) {
+  # Dynamically calculate the median and max for each sample
+stats <- df %>%
+  group_by(replicate, sub) %>%
+  summarize(median_value = median(!!sym(var_name)),
+            max_value = max(!!sym(var_name)))
+
+# Create the plot
+p <- ggplot(df, aes(x = sub, y = !!sym(var_name), color = replicate)) +
+  ggrastr::rasterise(geom_boxplot(aes(fill = replicate), alpha = 0.5, outlier.size = 0.1), dpi = 800) +  # Set alpha for fill only
+  geom_text(data = stats, aes(x = sub, y = max_value + 0.05 * max_value, label = round(median_value, 2), group = replicate),
+            position = position_dodge(width = 0.75), vjust = -0.5, size = 5, color = "black") +  # Add median values on top
+  theme_bw() +
+  scale_color_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+  labs(y = ylab, x = "", color = "Median") +
+  guides(color = "none", fill = "none") +  # Remove the legend
+  theme(panel.grid = element_blank(),
+        axis.text.x = element_text(color = "black", size = 16),
+        axis.text = element_text(color = "black", size = 16),
+        text = element_text(color = "black", size = 20))
   
-corr_plot <- function(df){
-pairwise_combinations <- combn(colnames(df), 2, simplify = FALSE)
-# Create a list of ggplots for each pair
-plot_list <- lapply(pairwise_combinations, function(pair) {
-  ggplot(mcf7, aes_string(x = pair[1], y = pair[2])) +
-    ggrastr::rasterise(geom_point(shape = 16, size = 2, color = "black"), dpi = 500) +
-    geom_smooth(method = "lm", color = "red") +
-    stat_cor(
-      method = "pearson",
-      label.x.npc = "left",
-      label.y.npc = "top",
-      size = 10
-    ) +
-    theme_bw() +
-    theme(panel.grid = element_blank()) 
-})
-# Assign meaningful names to each plot in the list
-names(plot_list) <- sapply(pairwise_combinations, function(pair) {
-  paste(pair, collapse = "_vs_")
-})
-p <- wrap_plots(plot_list)
-return(p)
+  if(log == TRUE) {p <- p + scale_y_log10()}
+  return(p)
 }
 
-gg_mcf7 <- corr_plot(mcf7) + 
-  labs(subtitle = "MCF7", x = "Mean counts/gene - stamp_11", y = "Mean counts/gene - stamp_12") +
-  theme(plot.subtitle = element_text(face = "bold")) &
-  common_theme 
 
-gg_skbr3 <- corr_plot(skbr3) + 
-  labs(subtitle = "SKBR3", x = "Mean counts/gene - stamp_11", y = "Mean counts/gene - stamp_12") + 
-  theme(plot.subtitle = element_text(face = "bold")) &
-  common_theme
 
-# Combine the plots vertically
-gg_corr <- wrap_plots(gg_mcf7,gg_skbr3, ncol = 1) + plot_layout(axis_titles = "collect")
 
-dir <- glue("./../rds")
-dir.create(dir,showWarnings = F)
-saveRDS(gg_corr,file = glue("{dir}/gg_corr.rds"))
+# Example usage
+df <- cd
+gg_sum <- create_boxplot(df, "sum", "Sample", "nCount", log = TRUE)
+gg_feat <- create_boxplot(df, "detected", "Sample", "nFeature", log = TRUE)
+gg_area <- create_boxplot(df, "cell_area", "Sample", "Cell area (um2)", log = FALSE)
+
+
+# Take count matrices
+c <- sce[,sce$replicate == "replicate 1"]
+n <- sce[,sce$replicate == "replicate 2"]
+c <- as(counts(c), "dgCMatrix")
+n <- as(counts(n), "dgCMatrix")
+
+# norm by total n cells
+c <- rowSums(c) / ncol(n)
+n <- rowSums(n) / ncol(n)
+c <- as.data.frame(as.matrix(c))
+n <- as.data.frame(as.matrix(n))
+
+names(c)[1] <- "replicate_1"
+names(n)[1] <- "replicate_2"
+
+c$gene <- rownames(c)
+n$gene <- rownames(n)
+df <- merge(c, n, by = "gene", all = TRUE)
+#df <- df[df$gene != "EEF1G",]
+
+
+gg_corr <- ggplot(df, aes(x = replicate_1, y = replicate_2)) + 
+  ggrastr::rasterise(geom_point(shape = 16, size = 3, alpha = 0.8), dpi = 800) +
+  ggpubr::stat_cor(method = "pearson", label.x = -1, label.y = 25, size = 7) + 
+  geom_smooth(method = "lm", color = "red") +
+  theme_bw() +
+  labs(x ="Mean counts/gene - replicate 1", y ="Mean counts/gene - replicate 2") +
+  theme(panel.grid =  element_blank(),
+        text = element_text(size = 20, color = "black"),
+        axis.text = element_text(size = 18, color = "black"))
+
+
+pdf("/Users/emanuelepitino/Desktop/fig2/h_i.pdf", width = 23, height = 7)
+wrap_plots(
+  gg_cnumb,
+  gg_sum,
+  gg_feat,
+  gg_area,
+  gg_corr,
+  nrow = 1
+) +
+  plot_layout(widths = c(1.5,1,1,1,2))
+
+dev.off()
+
+
+##
+

@@ -94,18 +94,20 @@ gg_cnumb <- ggplot(df, aes(x = Var1, y = Proportion)) +
   geom_col(aes(fill = Var2), alpha = 0.9) +
   scale_fill_manual(values = pal) +
   theme_bw() +
-  theme(text = element_text(size = 25, color = "black"),
-        axis.text = element_text(size = 20, color = "black"),
+  theme(text = element_text(size = 20, color = "black"),
+        axis.text = element_text(size = 16, color = "black"),
         legend.position = "none",
         panel.grid = element_blank()) +
-  labs(fill = "Sample", y = "Percentage") +
+  labs(fill = "Sample", y = "Proportion") +
   labs(x = "FOV", fill = "Cluster") +
   scale_x_discrete(
     breaks = c("1", "10", "20", "30", "40", "50", "60", "70", "80", "90", "97"),
     labels = c("1", "10", "20", "30", "40", "50", "60", "70", "80", "90", "97")) +
   coord_flip()
 
+pdf("/Users/emanuelepitino/Desktop/fig1/prop.pdf", width = 3, height = 8)
 gg_cnumb
+dev.off()
 ```
 
 ## Space
@@ -266,7 +268,7 @@ colnames(mtx_scaled) <- c("LnCAP", "MCF7", "SKBR3")
 
 library(reshape2)
 library(ggdendro)
-colnames(mtx_scaled) <- c("LnCAP", "MCF7", "SKBR3")
+colnames(mtx_scaled) <- c("LnCAP", "MCF-7", "SK-BR-3")
 
 # Perform hierarchical clustering on columns
 column_dist_euclidean <- dist(t(mtx_scaled), method = "euclidean")  # Use transpose to cluster columns
@@ -279,21 +281,28 @@ colnames(mtx_scaled_ordered) <- colnames(mtx_scaled)[ordered_columns]
 
 # Convert the matrix into a format suitable for ggplot
 mtx_melted <- melt(t(mtx_scaled_ordered))
-mtx_melted$Var1 <- factor(mtx_melted$Var1, levels = c("SKBR3", "MCF7", "LnCAP"))
+mtx_melted$Var1 <- factor(mtx_melted$Var1, levels = c("SK-BR-3", "MCF-7", "LnCAP"))
 # Create the heatmap using ggplot2
 hm <- ggplot(mtx_melted, aes(Var1, Var2, fill = value)) +
   geom_tile(color = "white") +
-  scale_fill_gradient2(low = "navy", mid = "white", high = "red", midpoint = 0, name = "expression") +
+  scale_fill_gradient2(low = "navy", mid = "white", high = "red",
+                       midpoint = 0, name = "log2FC avg. expr.") +
   theme_minimal() +
   theme(
-    axis.text.x = element_text(angle = 90, hjust = 1, size = 15),
-    axis.text.y = element_text(size = 15),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 15, color = "black"),
+    axis.text.y = element_text(size = 16, color = "black"),
     axis.title = element_blank(),
     legend.title = element_blank(),
-    legend.text = element_text(size = 12)
+    legend.text = element_text(size = 12),
+    panel.grid = element_blank()
   ) +
   labs(x = "", y = "") +
 coord_flip()
+
+pdf("/Users/emanuelepitino/Desktop/fig1/hm.pdf", height = 2.5, width = 12)
+hm
+dev.off()
+
 ```
 
 ```{r}

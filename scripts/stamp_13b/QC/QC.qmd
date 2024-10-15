@@ -1,0 +1,475 @@
+---
+title: "Quality control - Stamp 13b - PBMCs perturbations"
+subtitle: "Emanuele Pitino"
+date: "`r Sys.Date()`"
+format: 
+  html:
+    theme: superhero
+    smooth-scroll: true
+    code-fold: true
+    self-contained: true
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+editor: source
+editor_options: 
+  chunk_output_type: console
+execute:
+  echo: true
+  fig-width: 16     
+  fig-height: 12 
+---
+
+# Dependencies
+```{r}
+suppressPackageStartupMessages({
+  library(SingleCellExperiment)
+  library(tidyverse)
+  library(dplyr)
+  library(patchwork)
+  library(grid)
+  library(ggpubr)
+  library(here)
+  library(scater)
+  library(scuttle)
+  library(glue)
+  library(scran)
+  library(patchwork)
+  library(qs)
+  library(data.table)
+  library(scales)
+  library(RColorBrewer)
+})
+```
+
+
+# Data loading
+```{r}
+dir <- glue("{here()}/scripts")
+source(glue("{dir}/misc/paths.R"))
+source(glue("{dir}/misc/BIN.R"))
+stamp <- "stamp_13b"
+data_dir <- glue("{proj_dir}/data/{stamp}/raw/raw_proc")
+plots_dir <- glue("{plt_dir}/{stamp}")
+
+sce <- qread(glue("{data_dir}/layout_sce.qs"))
+```
+
+## Add experiment information
+```{r}
+split_sample <- do.call(rbind, strsplit(sce$sample, "_"))
+sce$experiment <- split_sample[, 1]
+sce$timepoint  <- split_sample[, 2]
+sce$replicate  <- split_sample[, 3]
+
+cd <- as.data.frame(colData(sce))
+pal <- pal_s13a
+```
+
+# Slide layout
+```{r}
+sce
+table(sce$sample)
+
+sce$sample <- factor(sce$sample, levels = c("ctrl_4h_r2",
+                                          "ctrl_4h_r1",
+                                          "ctrl_24h_r2",
+                                          "ctrl_24h_r1",
+                                          
+                                          "LPS_4h_r2",
+                                          "LPS_4h_r1",
+                                          "LPS_24h_r2",
+                                          "LPS_24h_r1",
+                                          
+                                          "aCD3aCD28_4h_r2",
+                                          "aCD3aCD28_4h_r1",
+                                          "aCD3aCD28_24h_r2",
+                                          "aCD3aCD28_24h_r1"))
+
+sce$timepoint <- factor(sce$timepoint, levels = c("4h","24h"))
+
+sce$experiment <- factor(sce$experiment, levels = c("ctrl","LPS","aCD3aCD28"))
+
+cd <- as.data.frame(colData(sce))
+ggplot(cd, aes(x = CenterX_global_px, y = CenterY_global_px, color = sample)) +
+  geom_point(shape = 16, size = 0.001) +
+  scale_color_manual(values = pal) +
+  labs(
+    subtitle = glue("{stamp}"),
+    x = "x (px)",
+    y = "y (px)"
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(size = 25, color = "black"),
+   plot.subtitle = element_text(size = 22, color = "black"),
+   axis.title  = element_text(size = 30),
+   panel.grid = element_blank(),
+   axis.text = element_blank(),
+   axis.ticks = element_blank()
+  ) +
+  coord_equal() +
+  guides(color = guide_legend(override.aes = list(size = 8), ncol = 1)) +
+  labs(color = "sub-STAMP")
+```
+
+## Calculate qc metrics
+```{r}
+sce <- addPerCellQCMetrics(sce)
+sce
+```
+
+```{r}
+df <- as.data.frame(colData(sce))
+plot_metrics_log <- function(data, color_var) {
+  p <- ggplot(df, aes(x = CenterX_global_px, y = CenterY_global_px, color = log(.data[[color_var]]))) + 
+  scale_color_viridis_c() +
+    geom_point(size = 0.1, shape = 16)+
+  theme_bw() + 
+  theme(panel.grid = element_blank(), text = element_text(colour = "black", size = 20), 
+        axis.text = element_text(colour = "black", size = 15),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank()) +
+    labs(x = "x (px)", y = "y (px)") +
+    coord_equal()
+  
+  if(color_var == "sum") {p <- p + labs(color = "nCount")}
+  if(color_var == "detected") {p <- p + labs(color = "nFeature")}
+
+return(p)
+}
+
+plot_metrics <- function(data, color_var) {
+  p <- ggplot(df, aes(x = CenterX_global_px, y = CenterY_global_px, color = .data[[color_var]])) + 
+  scale_color_viridis_c() +
+    geom_point(shape = 16,size = 0.01)+
+  theme_bw() + 
+  theme(panel.grid = element_blank(), text = element_text(colour = "black", size = 20), 
+        axis.text = element_text(colour = "black", size = 15),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank()) +
+    labs(x = "x (px)", y = "y (px)") +
+    coord_equal()
+  
+  if(color_var == "Area.um2") {p <- p + labs(color = "Cell area (um2)")}
+
+return(p)
+}
+
+gg_spat_counts <- plot_metrics_log(df, "sum")
+gg_spat_feat <- plot_metrics_log(df, "detected")
+gg_spat_area <- plot_metrics(df, "Area.um2")
+
+gg_spat_metrics <- wrap_plots(gg_spat_counts,gg_spat_feat, gg_spat_area, ncol = 3) + 
+  plot_annotation(title = glue("{stamp}"), tag_levels = "A",theme = theme(plot.title = element_text(size = 30)))
+
+gg_spat_metrics
+```
+
+
+```{r}
+df <- as.data.frame(colData(sce))
+gg_spat_counts <- plot_metrics_log(df, "sum")
+gg_spat_feat <- plot_metrics_log(df, "detected")
+gg_spat_area <- plot_metrics(df, "Area.um2")
+
+gg_spat_metrics <- wrap_plots(gg_spat_counts,gg_spat_feat, gg_spat_area, ncol = 3) + 
+  plot_annotation(title = glue("{stamp}"), tag_levels = "A",theme = theme(plot.title = element_text(size = 30)))
+
+gg_spat_metrics
+```
+
+### Find outliers
+
+```{r}
+# nCounts outliers
+discard_sum_lower <- isOutlier(sce$sum, 
+                         type = "lower", 
+                         log = TRUE,
+                         nmads = 2.5)
+discard_sum_higher <- isOutlier(sce$sum, 
+                         type = "higher", 
+                         log = TRUE,
+                         nmads = 1.5)
+# nFeatures outliers
+discard_detected_lower <- isOutlier(sce$detected, 
+                         type = "lower", 
+                         log = TRUE,
+                         nmads = 2.5)
+discard_detected_higher <- isOutlier(sce$detected, 
+                         type = "higher", 
+                         log = TRUE,
+                         nmads = 1.5)
+# Cell Area outliers
+discard_area_lower <- isOutlier(sce$Area.um2, 
+                         type = "lower", 
+                         log = TRUE,
+                         nmads = 2.5)
+
+discard_area_higher <- isOutlier(sce$Area.um2, 
+                         type = "higher", 
+                         log = TRUE,
+                         nmads = 1.5)
+```
+
+```{r}
+extr_thr <- function(df){
+return <- list()
+lower <- round(attr(df, 'thresholds')['lower'],0)
+higher <- round(attr(df, 'thresholds')['higher'],0)
+return(c(lower,higher))
+}
+```
+
+```{r}
+cd <- as.data.frame(colData(sce))
+
+qcmet_hist <- \(var, xmin,xmax){
+
+    if(var == "sum") {xlab = "nCount"; isOut_df_lower = discard_sum_lower; isOut_df_higher = discard_sum_higher}
+    if(var == "detected") {xlab = "nFeature"; isOut_df_lower = discard_detected_lower; isOut_df_higher = discard_detected_higher}
+    if(var == "Area.um2") {xlab = "Cell area (um2)"; isOut_df_lower = discard_area_lower; isOut_df_higher = discard_area_higher}
+    median <- round(median(cd[[var]]),0)
+    thr_lwr <- attr(isOut_df_lower,"threshold")["lower"]
+    thr_higher <- attr(isOut_df_higher,"threshold")["higher"]
+
+    p <- ggplot(cd, aes(x = !!sym(var))) +
+        geom_histogram(fill = "lightgrey", color = "black", bins = 30, alpha = 0.5) +
+        theme_bw() +
+        geom_vline(xintercept = median, color = "red", size = 1) +
+        geom_vline(xintercept = thr_lwr, color = "#4D4D4D", linetype = "dashed", size = 0.5) +
+        geom_vline(xintercept = thr_higher, color = "#4D4D4D", linetype = "dashed", size = 0.5) +
+        labs(y = "# cells", x = xlab) +
+        annotate("text", x = Inf, y = Inf, label = median, hjust = 1.1, vjust = 1.1, color = "red", size = 5) +
+        theme(
+            panel.grid = element_blank(), 
+            text = element_text(size = 20, color = "black"),
+            axis.text = element_text(size = 16, color = "black")
+        )
+
+    if(var == "sum" | var == "detected") {
+        p <- p + scale_x_log10() +
+            scale_y_continuous(breaks = c(0,50000,100000), labels = c(0,50000,100000))
+    }
+
+    if(var == "Area.um2") {
+        p <- p + scale_x_continuous(limits = c(0,210)) +
+            scale_y_continuous(breaks = c(0,25000,50000), labels = c(0,25000,50000))
+    }
+
+    return(p)
+}
+
+outdir <- glue("{plots_dir}/QC")
+dir.create(outdir,showWarnings = F,recursive = T)
+pdf(glue("{outdir}/qc_hist.pdf"), height = 7, width = 4)
+wrap_plots(
+  qcmet_hist("sum",0,13000),
+  qcmet_hist("detected",0,1000),
+  qcmet_hist("Area.um2",0,1000),
+  ncol = 1) +
+  plot_layout(axis_titles = "collect")
+dev.off()
+
+```
+
+# Filter
+
+```{r}
+filt <- sce[,sce$sum > as.numeric(attr(discard_sum_lower, "threshold")["lower"]) &
+             sce$sum < as.numeric(attr(discard_sum_higher, "threshold")["higher"]) &
+             sce$detected > as.numeric(attr(discard_detected_lower, "threshold")["lower"]) &
+             sce$detected < as.numeric(attr(discard_detected_higher, "threshold")["higher"]) &
+             sce$Area.um2 > as.numeric(attr(discard_area_lower, "threshold")["lower"]) &
+              sce$Area.um2 < as.numeric(attr(discard_area_higher, "threshold")["higher"])]
+```
+
+
+# Border effect
+```{r}
+sce <- filt
+md <- as.data.frame(colData(sce))
+```
+
+```{r}
+right <- md %>%
+        group_by(fov) %>%
+        mutate(d_border_px = max(CenterX_local_px) - CenterX_local_px) %>% 
+        filter(d_border_px < 500) %>%
+        ungroup() %>%
+        mutate(fov_cell = paste0(fov, "_", cell_id))
+
+left <- md %>%
+        group_by(fov) %>%
+        mutate(d_border_px = abs(min(CenterX_local_px) - CenterX_local_px)) %>% 
+        filter(d_border_px < 500) %>%
+        ungroup()%>%
+        mutate(fov_cell = paste0(fov, "_", cell_id))
+
+top <- md %>%
+        group_by(fov) %>%
+        mutate(d_border_px = abs(max(CenterY_local_px) - CenterY_local_px)) %>% 
+        filter(d_border_px < 500) %>%
+        ungroup()%>%
+        mutate(fov_cell = paste0(fov, "_", cell_id))
+
+bottom <- md %>%
+        group_by(fov) %>%
+        mutate(d_border_px = abs(min(CenterY_local_px) - CenterY_local_px)) %>% 
+        filter(d_border_px < 500) %>%
+        ungroup()%>%
+        mutate(fov_cell = paste0(fov, "_", cell_id))
+```
+
+```{r}
+plot_d_border <- function(df, title, thr) {
+  # Number of bins
+  num_bins <- 500
+  
+  # Create bins based on d_border_px
+  bins <- cut(df$d_border_px, breaks = num_bins, labels = FALSE)
+  
+  # Calculate means within each bin
+  bin_means <- aggregate(df$nCount_RNA, by = list(bin = bins), FUN = mean)
+  bin_centers <- aggregate(df$d_border_px, by = list(bin = bins), FUN = mean)
+  
+  # Combine bin means and centers into a single data frame
+  bin_data <- data.frame(bin_centers = bin_centers$x, bin_means = bin_means$x)
+  
+  # Create the plot
+  p <- ggplot(df, aes(x = d_border_px, y = nCount_RNA)) +
+    #geom_point(color = "lightblue", shape = 16, size = 0.1) +
+    geom_line(data = bin_data, aes(x = bin_centers, y = bin_means), color = "black", size = 0.1) +
+    geom_hline(yintercept = mean(df$nCount_RNA), color = "red") +
+    geom_vline(xintercept = thr, color = "red", linetype = "dashed") +
+    labs(
+      subtitle = title,
+      x = "distance from FOV border (px)",
+      y = "nCount"
+    ) +
+    theme_bw() +
+    scale_y_continuous(breaks = c(2000, 4000, 6000)) + 
+    scale_x_continuous(breaks = c(0, 100, 300,500)) + 
+    theme(
+      text = element_text(size = 20, color = "black"),
+      axis.text = element_text(size = 16, color = "black"),
+      plot.subtitle = element_text(size = 16,color = "black"),
+      panel.grid = element_blank())
+  # Return the plot object
+  return(p)
+}
+```
+
+```{r}
+wh(20,10)
+par(mfrow = c(2, 2))
+a <-plot_d_border(left[left$d_border_px <500,], "i) left", 25)
+b <- plot_d_border(right[right$d_border_px <500,],"ii) right", 25)
+c <- plot_d_border(bottom[bottom$d_border_px <500,], "iii) bottom", 25)
+d <- plot_d_border(top[top$d_border_px <500,], "iv) top", 25)
+```
+
+```{r}
+gg_border_effect <- wrap_plots(a,b,c,d, ncol = 2) +
+  plot_layout(axis_titles = "collect")
+```
+
+```{r}
+remove_left <- unique(left$fov_cell[left$d_border_px < 25 & left$nCount_RNA < mean(left$nCount_RNA)])
+remove_right <- unique(right$fov_cell[right$d_border_px < 25 & right$nCount_RNA < mean(right$nCount_RNA)])
+remove_bottom <- unique(bottom$fov_cell[bottom$d_border_px < 25 & bottom$nCount_RNA < mean(bottom$nCount_RNA)])
+remove_top <- unique(top$fov_cell[top$d_border_px < 25 & top$nCount_RNA < mean(top$nCount_RNA)])
+remove <- c(remove_top,remove_bottom,remove_left,remove_right)
+```
+
+```{r}
+sce$fov_cell <- paste0(sce$fov, "_", sce$cell_id)
+
+filt <- sce[,!sce$fov_cell %in% remove]
+```
+
+
+```{r}
+tbl_unfilt <- as.data.frame(table(sce$fov))
+tbl_filt <- as.data.frame(table(filt$fov))
+
+colnames(tbl_filt)[colnames(tbl_filt) == "Freq"] <- "Freq_2"
+
+tbl_merged <- merge(tbl_unfilt, tbl_filt, by = "Var1", all = TRUE)
+tbl_merged$pct_removed <- round((((tbl_merged$Freq - tbl_merged$Freq_2)/tbl_merged$Freq)*100), 2)
+tbl_merged$pct_kept <- 100- tbl_merged$pct_removed
+```
+
+
+```{r}
+# Create a new column for the difference
+tbl_merged$cells_removed <- tbl_merged$Freq - tbl_merged$Freq_2
+
+# Calculate the total counts for each FOV
+tbl_merged$Total <- tbl_merged$Freq
+
+# Calculate the relative percentages
+tbl_merged$removed_pct <- tbl_merged$cells_removed / tbl_merged$Total * 100
+
+# Order the data frame by FOV
+tbl_merged <- tbl_merged[order(tbl_merged$Var1),]
+
+# Restructure the data for ggplot2
+tbl_long <- tbl_merged %>%
+  select(Var1, cells_removed, Freq_2) %>%
+  pivot_longer(cols = c(cells_removed, Freq_2), names_to = "Category", values_to = "Count")
+
+tbl_long$Category <- factor(tbl_long$Category, levels = c("Freq_2", "cells_removed"))
+# Calculate the median percentage cells removed
+median_removed_pct <- round(median(tbl_merged$removed_pct), 2)
+total_cells_removed <- sum(tbl_merged$cells_removed)
+total_cells_kept <- sum(tbl_merged$Freq_2)
+
+# Create the ggplot
+gg_border_eff_quantification <- ggplot(tbl_long, aes(x = Var1, y = Count, fill = Category)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = c("grey", "red"), labels = c(glue("Kept (N = {total_cells_kept})"),
+                                                              glue("Removed (N = {total_cells_removed})"))) +
+  labs(
+    x = "FOV", 
+    y = "# Cells", 
+    fill = ""
+  ) +
+  theme(plot.title = element_text(size = 20))  # Increase the title size to 20
+
+gg_border_eff_quantification <- gg_border_eff_quantification +
+  theme_bw() +
+  theme(
+    text = element_text(size = 20, color = "black"),
+    axis.text = element_text(size = 16, color = "black"),
+    plot.subtitle = element_text(size = 16,color = "black"),
+    panel.grid = element_blank(),
+    legend.position = "top",
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank())
+```
+
+```{r fig.width=12, fig.height= 8}
+c <-wrap_plots(
+  qcmet_hist("sum",0,13000),
+  qcmet_hist("detected",0,1000),
+  qcmet_hist("Area.um2",0,1000),
+  ncol = 1) +
+  plot_layout(axis_titles = "collect")
+
+de <- wrap_plots(gg_border_effect, gg_border_eff_quantification, nrow = 2)
+
+wrap_plots(c,de, ncol = 2) + plot_layout(widths = c(1,3))
+```
+
+# Save sce
+```{r}
+outdir <- glue("{proj_dir}/data/{stamp}/processed")
+dir.create(outdir, showWarnings = F, recursive = T)
+qsave(filt, file = glue("{outdir}/qc_sce.qs"), nthreads = 8)
+```

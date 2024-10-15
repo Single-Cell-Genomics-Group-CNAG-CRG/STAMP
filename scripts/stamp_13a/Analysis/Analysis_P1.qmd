@@ -1,0 +1,278 @@
+---
+title: "Analysis - Stamp_13a"
+subtitle: "Emanuele Pitino"
+date: "`r Sys.Date()`"
+format: 
+  html:
+    theme: superhero
+    smooth-scroll: true
+    code-fold: true
+    self-contained: true
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+editor: source
+editor_options: 
+  chunk_output_type: console
+execute:
+  echo: true
+  fig-width: 16     
+  fig-height: 12 
+---
+
+### Libraries
+
+```{r}
+suppressPackageStartupMessages({
+library(SingleCellExperiment)
+library(dplyr)
+library(here)
+library(scater)
+library(glue)
+library(qs)
+library(BiocParallel)
+library(BiocNeighbors)
+library(BiocSingular)
+library(data.table)
+library(spatstat)
+library(InSituType)
+})
+```
+
+### Data loading
+
+```{r}
+dir <- glue("{here()}")
+source(glue("{dir}/scripts/misc/paths.R"))
+source(glue("{dir}/scripts/misc/BIN.R"))
+```
+
+```{r}
+stamp <- "stamp_13a"
+res_dir <- glue("{proj_dir}/data/{stamp}/processed")
+sce <- qread(glue("{res_dir}/anno_sce_P1.qs"), nthreads = 8)
+```
+
+```{r}
+dir <- glue("{proj_dir}/data/{stamp}/Ist")
+unsup <- qread(glue("{dir}/unsup.qs"))
+```
+
+
+```{r}
+sce$label <- unsup$clust[colnames(sce)]
+sce$label_prob <- unsup$prob[colnames(sce)]
+
+pal_layout <- pal_s13a
+
+pal <- Polychrome::createPalette(26,c("#99FFFF", "#FF99FF", "#FFFF99"))
+names(pal) <- unique(sce$lvl1)
+```
+
+```{r}
+cd <- as.data.frame(colData(sce))
+```
+
+```{r}
+layout <- ggplot(cd, aes(x = CenterX_global_px, y = CenterY_global_px, color = sample)) +
+  ggrastr::rasterise(geom_point(shape = 16, size = 0.001), dpi = 500) +
+  scale_color_manual(values = pal_s13a) +
+  labs(
+    subtitle = "PBMCs perturbations",
+    x = "x (px)",
+    y = "y (px)"
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(size = 25, color = "black"),
+   plot.subtitle = element_text(size = 22, color = "black"),
+   axis.title  = element_text(size = 30),
+   panel.grid = element_blank(),
+   axis.text = element_blank(),
+   axis.ticks = element_blank(),
+   legend.title = element_text(size = 20),
+   legend.text = element_text(size = 16)
+  ) +
+  coord_equal() +
+  guides(color = guide_legend(override.aes = list(size = 6), ncol = 1)) +
+  labs(color = "sub-STAMP")
+
+pdf("/Users/emanuelepitino/Desktop/stamp_13a/layout.pdf")
+layout
+dev.off()
+```
+
+```{r}
+df <- cd[,c("timepoint","experiment","lvl1")]
+df <- as.data.frame(table(cd$experiment,cd$timepoint,cd$lvl1,cd$replicate)) %>%
+  group_by(Var1,Var2,Var4) %>%
+  mutate(pct = round(Freq / sum(Freq),4))
+
+df$Var4 <- as.character(df$Var4)
+df$Var4[df$Var4 == "r1"] <- "R.1"
+df$Var4[df$Var4 == "r2"] <- "R.2"
+df$Var4 <- factor(df$Var4, levels = c("R.1","R.2"))
+prop <- ggplot(df, aes(x = Var4, y = pct, fill = Var3)) +
+         geom_col() +
+  scale_fill_manual(values = pal) +
+  facet_grid(~Var2~Var1) +
+  theme_bw() +
+  theme(aspect.ratio = 2.5/1,
+        text = element_text(size = 18, color ="black"),
+        axis.text = element_text(color = "black", size = 15),
+        axis.title = element_text(color = "black", size = 18),
+        legend.text = element_text(size = 12)) +
+  labs(x = "Replicate", y = "Proportion", fill = "Cell type") +
+  scale_y_continuous(breaks = c(0.00,0.50,1))
+
+pdf("/Users/emanuelepitino/Desktop/stamp_13a/Prop.pdf")
+prop
+dev.off()
+s```
+
+## Differential Expression ctrl vs LPS 4h
+```{r}
+sub <- sce[,sce$experiment %in% c("ctrl","LPS") & sce$timepoint == "4h"]
+sub$experiment <- as.factor(as.character(sub$experiment))
+```
+
+```{r}
+# Combine 'experiment' and 'lvl1' into a single group variable
+sub$group <- interaction(sub$experiment, sub$lvl1, sep = ".")
+
+# Define the groups for 'scoreMarkers'
+groups <- sub$group
+
+# Get unique experiments and lvl1 levels
+experiments <- unique(sub$experiment)
+lvl1_levels <- unique(sub$lvl1)
+
+# Initialize an empty data frame for pairings
+pairings <- data.frame(first = character(), second = character(), stringsAsFactors = FALSE)
+
+# Generate pairings for each lvl1 level
+for (lvl in lvl1_levels) {
+  # Get all combinations of experiments for the current lvl1
+  if (length(experiments) >= 2) {
+    exp_pairs <- t(combn(experiments, 2))
+    for (i in 1:nrow(exp_pairs)) {
+      group1 <- paste(exp_pairs[i, 1], lvl, sep = ".")
+      group2 <- paste(exp_pairs[i, 2], lvl, sep = ".")
+      # Add the pair to the pairings data frame
+      pairings <- rbind(pairings, data.frame(first = group1, second = group2, stringsAsFactors = FALSE))
+    }
+  }
+}
+# Run 'scoreMarkers' with the generated 'pairings'
+mrk <- scran::scoreMarkers(sub, groups = groups, pairings = pairings, BPPARAM = bp)
+```
+
+```{r}
+top_markers <- lapply(mrk, function(res) {
+  res[order(res$self.average, decreasing = TRUE), ][1:10, ]  # Get top 10 markers based on FDR
+})
+```
+
+
+```{r}
+lps <- as.data.frame(mrk[["LPS"]]) %>% select(self.detected,self.average,median.logFC.detected) %>%
+  arrange(desc(self.detected))
+
+feat <- lapply(mrk, function(df) {
+  as.data.frame(df) %>%
+    arrange(desc(self.average)) %>%
+    head(15) %>%
+    rownames()
+})
+feat <- unique(unlist(feat))
+
+dot <- plotDots(sub, 
+                group = "experiment", features = feat, scale = F, center = F) + coord_flip() +
+  theme(aspect.ratio = 1/5,
+        axis.text.x = element_text(angle = 90, vjust = 1,hjust = 1, color = "black"))
+dot
+```
+
+# MDS
+```{r}
+library(scuttle)
+sub <- sce[,sce$experiment %in% c("ctrl","LPS") & sce$lvl0 == "myeloid"]
+sub <- sce[,sce$experiment %in% c("ctrl","LPS")]
+sub <- logNormCounts(sub)
+sub$id <- paste0(sub$replicate,"_",sub$lvl1,"_",sub$timepoint,"_",sub$experiment)
+agg <- aggregateAcrossCells(sub, ids = sub$id, use.assay.type = "logcounts", statistics = "mean")
+
+mds <- runMDS(agg)
+
+mds_plt <- list()
+for(sub in unique(mds$lvl1)){
+  
+mds_plt[[sub]]<- plotMDS(mds[,mds$lvl1 == sub], 
+        size_by = "replicate", color_by = "experiment", shape_by = "timepoint", point_size =5) +
+  labs(subtitle = sub) +
+  theme(plot.subtitle = element_text(size = 15, color = "black"))
+}
+
+wrap_plots(mds_plt) + plot_layout(guides = "collect")
+```
+
+
+
+```{r}
+myelo <- sce[,sce$lvl0 == "myeloid" & 
+               sce$experiment %in% c("ctrl","LPS") & 
+               sce$timepoint == "4h"]
+mrk <- scoreMarkers(sub, groups = sub$experiment, BPPARAM = bp)
+
+feat <- lapply(mrk, function(df) {
+  as.data.frame(df) %>%
+    arrange(desc(median.logFC.detected)) %>%
+    head(10) %>%
+    rownames()
+})
+feat <- unique(unlist(feat))
+
+
+
+
+#feat <- grep("TLR", rownames(myelo), value = TRUE)
+sub <- sce[,sce$experiment %in% c("LPS","ctrl") & sce$lvl0 == "myeloid" & sce$timepoint == "24h"]
+dot <- plotDots(sub, 
+                group = "experiment", features = feat, scale = F, center = F) + coord_flip() +
+  theme(aspect.ratio = 1/5,
+        axis.text.x = element_text(angle = 90, vjust = 1,hjust = 1, color = "black"))
+dot
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+sessionInfo()
+```

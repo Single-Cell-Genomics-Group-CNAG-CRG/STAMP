@@ -1,0 +1,423 @@
+---
+title: "Exploratory - clustering - Stamp_13b"
+subtitle: "Emanuele Pitino"
+date: "`r Sys.Date()`"
+format: 
+  html:
+    theme: superhero
+    smooth-scroll: true
+    code-fold: true
+    self-contained: true
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+editor: source
+editor_options: 
+  chunk_output_type: console
+execute:
+  echo: true
+  fig-width: 16     
+  fig-height: 12 
+---
+
+### Libraries
+```{r}
+suppressPackageStartupMessages({
+library(SingleCellExperiment)
+library(dplyr)
+library(here)
+library(scater)
+library(glue)
+library(qs)
+library(BiocParallel)
+library(BiocNeighbors)
+library(BiocSingular)
+library(data.table)
+library(spatstat)
+library(InSituType)
+})
+```
+
+### Data loading
+```{r}
+dir <- glue("{here()}")
+source(glue("{dir}/scripts/misc/paths.R"))
+source(glue("{dir}/scripts/misc/BIN.R"))
+```
+
+```{r}
+stamp <- "stamp_13b"
+res_dir <- glue("{proj_dir}/data/{stamp}/processed")
+sce <- qread(glue("{res_dir}/PreProcNew.qs"), nthreads = 8)
+```
+
+```{r}
+dir <- glue("{proj_dir}/data/{stamp}/Ist")
+unsup <- qread(glue("{dir}/unsup_20_25.qs"))
+```
+
+
+```{r}
+sce$label <- unsup$clust[colnames(sce)]
+sce$label_prob <- unsup$prob[colnames(sce)]
+
+pal_layout <- pal_s13a
+
+pal <- Polychrome::createPalette(26,c("#99FFFF", "#FF99FF", "#FFFF99"))
+names(pal) <- unique(sce$label)
+```
+
+## Label transfer probability in space
+```{r}
+df <- as.data.frame(colData(sce))
+df <- df[sample(rownames(df)),]
+ ggplot(df, aes(x = CenterX_global_px, y = CenterY_global_px, color = label_prob)) + 
+ # scale_color_manual(values = pal) +
+  geom_point(size = 0.1, shape = 16) +
+  scale_color_viridis_c() +
+  theme_bw() + 
+  theme(panel.grid = element_blank(), text = element_text(colour = "black", size = 20), 
+        axis.text = element_text(colour = "black", size = 15)) +
+  labs(x = "x_px", y = "y_px") +
+   coord_equal() +
+   labs(color = "Ist Prob", subtitle = glue("Prob < 0.8: {format(sum(df$label_prob < 0.8),big.mark = ',')}"))
+```
+
+## Remove cells with transfer prob < 0.8
+```{r}
+sce <- sce[, sce$label_prob > 0.8]
+```
+
+## Cell numbers
+
+```{r}
+df <- as.data.frame(table(sce$label)) %>%
+  mutate(Proportion = round((Freq/sum(Freq))*100, 2)) %>%
+  mutate(Var1 = factor(Var1, levels = Var1[order(-Freq)]))  # Reorder the levels of Var1 by decreasing Freq
+
+wrap_plots(
+  ggplot(df, aes(x = Var1, y = Freq, fill = Var1)) + 
+  geom_col() + 
+  geom_text(aes(label = Freq), vjust = -0.5) +  # Add the values on top of each bar
+  labs(x = "Cluster", y = "# Cells", fill = "Cluster") + 
+  theme_bw() + 
+  theme(panel.grid = element_blank()) +
+  scale_fill_manual(values = pal),
+  
+  ggplot(df, aes(x = "", y = Proportion, fill = Var1)) + 
+  geom_col() + 
+  labs(x = "", y = "Proportion", fill = "Cluster") + 
+  theme_bw() + 
+  theme(panel.grid = element_blank(),
+        aspect.ratio = 15/1) +
+  scale_fill_manual(values = pal),
+  ncol = 2) + 
+  plot_layout(guides = "collect", axis_titles = "collect")
+  
+```
+
+# Principal Component Regression
+```{r}
+.pcr <- \(sce, x) {
+    y <- reducedDim(sce, "PCA")
+    z <- summary(lm(y ~ sce[[x]]))
+    r2 <- sapply(z, \(.) .$adj.r.squared)
+    data.frame(x, pc=seq_along(r2), r2)
+}
+# for multiple variables (mock code):
+xs <- c("label","Area.um2","sum","detected","CenterX_global_px","CenterY_global_px")
+df <- do.call(rbind, lapply(xs, \(x) .pcr(sce, x)))
+
+
+pal <- Polychrome::createPalette(26,c("#99FFFF", "#FF99FF", "#FFFF99"))
+names(pal) <- unique(df$x)
+
+ggplot(df, aes(x = pc, y = r2, color = x)) +
+  geom_line() +
+  geom_point() +
+  theme_bw() + 
+  scale_x_continuous(breaks = unique(df$pc)) +
+  theme(panel.grid = element_blank(),
+        axis.text = element_text(color = "black", size = 15),
+        axis.title = element_text(color = "black", size = 25)) +
+  scale_color_manual(values = pal) +
+  scale_fill_manual(values = pal)
+```
+
+# PCA colored by nCount/nFeature/Cell area
+```{r}
+df <- as.data.frame(colData(sce)) # cd
+pca <- reducedDim(sce,"PCA") # pc
+
+df <- cbind(df,pca) # merge
+df <- df[sample(nrow(df)), ] # shuffle
+
+pal <- Polychrome::createPalette(n_distinct(sce$label), c("#FBB4AE", "#B3CDE3", "#CCEBC5"))
+names(pal) <- unique(sce$label)
+
+
+pc_plot <- \(pcx = "PC1", pcy = "PC2", color){
+  
+  # Apply transformation to the color column conditionally
+  df$color_mapped <- if (color == "Area.um2") {
+    df[[color]]  # No transformation for "Area.um2"
+  } else {
+    log1p(df[[color]])  # Apply log1p for other columns
+  }
+  
+  ggplot(df, aes(x = !!sym(pcx), y = !!sym(pcy), color = color_mapped)) +
+    geom_point(shape = 16, size = 0.01) +
+    theme_bw() +
+    scale_color_viridis_c() +
+    theme(
+      text = element_text(size = 25, color = "black"),
+      axis.text = element_text(size = 20, color = "black"),
+      legend.text = element_text(size = 12),
+      legend.title = element_text(size = 18),
+      panel.grid.major = element_blank(), 
+      panel.grid.minor = element_blank()) +
+    coord_equal() +
+    labs(color = color)
+}
+
+wrap_plots(
+  pc_plot(color ="sum"),
+  pc_plot(color = "detected"),
+  pc_plot(color ="Area.um2"),
+  ncol = 3) 
+
+wrap_plots(
+  pc_plot(pcx = "PC1",pcy = "PC3",color ="sum"),
+  pc_plot(pcx = "PC1",pcy = "PC3",color = "detected"),
+  pc_plot(pcx = "PC1",pcy = "PC3",color ="Area.um2"),
+  ncol = 3) 
+
+wrap_plots(
+  pc_plot(pcx = "PC1",pcy = "PC4",color ="sum"),
+  pc_plot(pcx = "PC1",pcy = "PC4",color = "detected"),
+  pc_plot(pcx = "PC1",pcy = "PC4",color ="Area.um2"),
+  ncol = 3) 
+```
+
+# Mean Fluorescence Intensity PCA
+
+```{r}
+mfi_names <- grep("Mean", colnames(df), value = T)
+
+wrap_plots(
+  pc_plot(color = mfi_names[1]),
+  pc_plot(color = mfi_names[2]),
+  pc_plot(color = mfi_names[3]),
+  pc_plot(color = mfi_names[4]),
+  pc_plot(color = mfi_names[5]),
+  ncol = 3) 
+
+wrap_plots(
+  pc_plot(pcx = "PC1",pcy = "PC3",color = mfi_names[1]),
+  pc_plot(pcx = "PC1",pcy = "PC3",color = mfi_names[2]),
+  pc_plot(pcx = "PC1",pcy = "PC3",color = mfi_names[3]),
+  pc_plot(pcx = "PC1",pcy = "PC3",color = mfi_names[4]),
+  pc_plot(pcx = "PC1",pcy = "PC3",color = mfi_names[5]),
+  ncol = 3) 
+
+wrap_plots(
+  pc_plot(pcx = "PC1",pcy = "PC4",color = mfi_names[1]),
+  pc_plot(pcx = "PC1",pcy = "PC4",color = mfi_names[2]),
+  pc_plot(pcx = "PC1",pcy = "PC4",color = mfi_names[3]),
+  pc_plot(pcx = "PC1",pcy = "PC4",color = mfi_names[4]),
+  pc_plot(pcx = "PC1",pcy = "PC4",color = mfi_names[5]),
+  ncol = 3) 
+
+```
+
+## PCA by cluster
+
+```{r}
+pal <- Polychrome::createPalette(26,c("#99FFFF", "#FF99FF", "#FFFF99"))
+names(pal) <- unique(df$label)
+df <- df[sample(rownames(df)),]
+
+ggplot(df, aes(x = PC1, y = PC2, color = label)) +
+  geom_point(shape = 16, size = 0.01) +
+  theme_bw() +
+  scale_color_manual(values = pal) +
+  theme(
+    text = element_text(size = 25, color = "black"),
+    axis.text = element_text(size = 20, color = "black"),
+    legend.text = element_text(size = 12),
+    legend.title = element_text(size = 18),
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank()
+  ) +
+  coord_equal() +
+  guides(color = guide_legend(override.aes = list(size = 5)))  
+```
+
+## MFI by cluster
+```{r}
+ggplot(df, aes(x = label, y = sizeFactor, color = label )) +
+  geom_boxplot(outlier.size = 0.01) +
+  #scale_y_log10() +
+  theme_bw() + 
+  theme(panel.grid = element_blank()) +
+  scale_color_manual(values = pal)
+
+```
+
+## Space
+```{r}
+df <- as.data.frame(colData(sce))
+df <- df[sample(rownames(df)),]
+
+gg_space <-  ggplot(df, aes(x = CenterX_global_px, y = CenterY_global_px, color = label)) + 
+  scale_color_manual(values = pal) +
+  ggrastr::rasterise(geom_point(size = 0.1, shape = 16), dpi = 600) +
+  theme_bw() + 
+  theme(panel.grid = element_blank(), text = element_text(colour = "black", size = 20), 
+        axis.text = element_text(colour = "black", size = 15)) +
+  labs(x = "x_px", y = "y_px") +
+  guides(color = guide_legend(override.aes = list(size = 4))) +
+   coord_equal() +
+   labs(color = "Cluster")
+
+gg_space
+```
+
+```{r}
+plist <- list()
+for(clust in unique(df$label)){
+  
+  sub <- df[df$label == clust,]
+  plist[[clust]] <- ggplot(sub, aes(x = CenterX_global_px, y = CenterY_global_px, color = label)) + 
+  scale_color_manual(values = pal) +
+  geom_point(size = 0.1, shape = 16) +
+  theme_bw() + 
+  theme(panel.grid = element_blank(), text = element_text(colour = "black", size = 20), 
+        axis.text = element_text(colour = "black", size = 15)) +
+  labs(x = "x_px", y = "y_px") +
+  guides(color = guide_legend(override.aes = list(size = 4))) +
+   coord_equal() +
+   labs(subtitle = clust)
+}
+plist
+```
+
+
+## FlightPath
+```{r}
+fp_layout <- flightpath_layout(logliks = unsup$logliks, profiles = unsup$profiles)
+
+gg_fp <- ggplot(fp_layout$cellpos, aes(x = x, y = y, color = fp_layout$clust)) +
+  geom_point(size = 0.3, shape = 16) +
+  scale_color_manual(values = pal) +
+  theme_bw() +
+    theme(text = element_text(size = 15, color = "black"),
+          axis.text = element_text(size = 10, color = "black"),
+          panel.grid = element_blank(),
+          axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(color = "Cluster", title = glue("FlightPath - {stamp}")) +
+  guides(color = guide_legend(override.aes = list(size = 4))) 
+gg_fp
+```
+
+## InSituType Profiles
+
+Normalize & log-transform the profiles
+```{r}
+norm <- unsup$profiles /  Matrix::colSums(unsup$profiles) # average
+norm <- norm + 1e-6
+```
+
+Calculate logFC
+
+```{r}
+result <- norm 
+for (i in 1:nrow(norm)) {
+  for (j in 1:ncol(norm)) {
+    result[i, j] <- log2(norm[i, j] / mean(norm[i, -j]))
+  }
+}
+```
+
+Take top features for each cluster by logFC
+
+```{r}
+feat <- unique(as.vector(unlist(apply(result, 2, function(column) {
+  names(sort(column, decreasing = TRUE))[1:10]
+}))))
+```
+
+Remove outliers at 2.5 sd for better visualization
+
+```{r}
+x <- result[feat,]
+
+z <- \(x, th=2.5) {
+    if (is.null(dim(x))) {
+        x[x < 0] <- 0
+        sd <- sd(x, na.rm=TRUE)
+        x <- x-mean(x, na.rm=TRUE)
+        if (sd != 0) x <- x/sd
+    } else {
+        mus <- colMeans(x)
+        sds <- colSds(x)
+        x <- sweep(x, 2, mus, `-`)
+        x <- sweep(x, 2, sds, `/`)
+    }
+    x[x > +th] <- +th
+    x[x < -th] <- -th
+    return(x)
+}
+mtx_scaled <- z(x)
+```
+
+Plot
+
+```{r, fig.width = 15, fig.height= 5}
+library(reshape2)
+library(ggdendro)
+
+# Perform hierarchical clustering on columns
+column_dist_euclidean <- dist(t(mtx_scaled), method = "euclidean")  # Use transpose to cluster columns
+column_hclust_complete <- hclust(column_dist_euclidean, method = "average")
+
+# Reorder the columns based on clustering
+ordered_columns <- column_hclust_complete$order
+mtx_scaled_ordered <- mtx_scaled[, ordered_columns]
+colnames(mtx_scaled_ordered) <- colnames(mtx_scaled)[ordered_columns]
+
+# Convert the matrix into a format suitable for ggplot
+mtx_melted <- melt(t(mtx_scaled_ordered))
+mtx_melted$Var1 <- factor(mtx_melted$Var1, levels = rev(c("a","b","c","d","e","f","g","h","i","j","k",
+                                                          "l","m","n","o","p","q","r","s","t","u","v","w","x")))
+# Create the heatmap using ggplot2
+hm <- ggplot(mtx_melted, aes(Var1, Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "navy", mid = "white", high = "red", midpoint = 0, name = "expression") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8, color = "black"),
+    axis.text.y = element_text(size = 20, color = "black"),
+    axis.title = element_blank(),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    panel.grid = element_blank(),
+    aspect.ratio = 1/4
+  ) +
+  labs(x = "", y = "") +
+coord_flip()
+
+pdf("/Users/emanuelepitino/Desktop/tmp2/hm.pdf", width = 30, height = 5)
+hm
+dev.off()
+```
+
+```{r}
+dir <- glue("{proj_dir}/data/{stamp}/processed")
+qsave(sce, file = glue("{dir}/anno_sce.qs"), nthreads = 8)
+```
+
+```{r}
+sessionInfo()
+```
