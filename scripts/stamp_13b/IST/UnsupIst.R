@@ -51,7 +51,7 @@ ist <- function(sce, nk, gs=TRUE, pbs=NULL, bkg=TRUE) {
 }
 
 # Run IST
-unsup <- ist(sce, 2:6)
+unsup <- ist(sce, 12:12)
 
 # Save
 dir <- glue("{proj_dir}/data/{stamp}/Ist")

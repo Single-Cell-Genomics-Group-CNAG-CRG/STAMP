@@ -18,7 +18,7 @@ sce <- sce[,sce$experiment %in% c("LPS","ctrl")]
 sce
 sce <- logNormCounts(sce)
 
-sce$id <- paste0(sce$lvl1,"_",sce$replicate,"_",sce$timepoint,"_",sce$experiment)
+sce$id <- paste0(sce$lvl1,"_",sce$timepoint,"_",sce$experiment)
 
 agg <- aggregateAcrossCells(sce, ids = sce$id, use.assay.type = "logcounts", statistics = "mean")
 
@@ -28,7 +28,7 @@ mds_plt <- list()
 for(sub in unique(agg$lvl1)){
   
   mds_plt[[sub]]<- plotMDS(agg[,agg$lvl1 == sub],
-                           color_by = "experiment", size_by = "replicate", shape_by = "timepoint", point_size =5) +
+                           color_by = "experiment", shape_by = "timepoint", point_size =5) +
     labs(subtitle = sub) +
     theme(plot.subtitle = element_text(size = 15, color = "black"))
 }
@@ -37,7 +37,8 @@ for(sub in unique(agg$lvl1)){
 plotMDS(agg, color_by = "experiment", shape_by = "timepoint", point_size = 3) + 
   facet_wrap(~agg$lvl1, scales = "free") 
 
-wrap_plots(mds_plt) + plot_layout(guides = "collect")
+wrap_plots(mds_plt) + plot_layout(guides = "collect")wrap_plots(mds_plt) + plot_lvl1layout(guides = "collect")
+
 
 
 

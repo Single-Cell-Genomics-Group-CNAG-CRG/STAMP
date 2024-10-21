@@ -49,9 +49,9 @@ source(glue("{dir}/scripts/misc/BIN.R"))
 ```
 
 ```{r}
-stamp <- "stamp_13a"
+stamp <- "stamp_13b"
 res_dir <- glue("{proj_dir}/data/{stamp}/processed")
-sce <- qread(glue("{res_dir}/anno_sce_P1.qs"), nthreads = 8)
+sce <- qread(glue("{res_dir}/anno_sce.qs"), nthreads = 8)
 ```
 
 ```{r}
@@ -67,7 +67,7 @@ sce$label_prob <- unsup$prob[colnames(sce)]
 pal_layout <- pal_s13a
 
 pal <- Polychrome::createPalette(26,c("#99FFFF", "#FF99FF", "#FFFF99"))
-names(pal) <- unique(sce$lvl1)
+names(pal) <- unique(sce$label)
 ```
 
 ```{r}
@@ -98,14 +98,14 @@ layout <- ggplot(cd, aes(x = CenterX_global_px, y = CenterY_global_px, color = s
   guides(color = guide_legend(override.aes = list(size = 6), ncol = 1)) +
   labs(color = "sub-STAMP")
 
-pdf("/Users/emanuelepitino/Desktop/stamp_13a/layout.pdf")
+pdf("/Users/emanuelepitino/Desktop/stamp_13b/layout.pdf")
 layout
 dev.off()
 ```
 
 ```{r}
-df <- cd[,c("timepoint","experiment","lvl1")]
-df <- as.data.frame(table(cd$experiment,cd$timepoint,cd$lvl1,cd$replicate)) %>%
+df <- cd[,c("timepoint","experiment","label")]
+df <- as.data.frame(table(cd$experiment,cd$timepoint,cd$label,cd$replicate)) %>%
   group_by(Var1,Var2,Var4) %>%
   mutate(pct = round(Freq / sum(Freq),4))
 
@@ -126,7 +126,7 @@ prop <- ggplot(df, aes(x = Var4, y = pct, fill = Var3)) +
   labs(x = "Replicate", y = "Proportion", fill = "Cell type") +
   scale_y_continuous(breaks = c(0.00,0.50,1))
 
-pdf("/Users/emanuelepitino/Desktop/stamp_13a/Prop.pdf")
+pdf("/Users/emanuelepitino/Desktop/stamp_13b/Prop.pdf")
 prop
 dev.off()
 ```
@@ -197,18 +197,17 @@ dot
 # MDS
 ```{r}
 library(scuttle)
-sub <- sce[,sce$experiment %in% c("ctrl","LPS") & sce$lvl0 == "myeloid"]
 sub <- sce[,sce$experiment %in% c("ctrl","LPS")]
 sub <- logNormCounts(sub)
-sub$id <- paste0(sub$replicate,"_",sub$lvl1,"_",sub$timepoint,"_",sub$experiment)
+sub$id <- paste0(sub$replicate,"_",sub$label,"_",sub$timepoint,"_",sub$experiment)
 agg <- aggregateAcrossCells(sub, ids = sub$id, use.assay.type = "logcounts", statistics = "mean")
 
 mds <- runMDS(agg)
 
 mds_plt <- list()
-for(sub in unique(mds$lvl1)){
+for(sub in unique(mds$label)){
   
-mds_plt[[sub]]<- plotMDS(mds[,mds$lvl1 == sub], 
+mds_plt[[sub]]<- plotMDS(mds[,mds$label == sub], 
         size_by = "replicate", color_by = "experiment", shape_by = "timepoint", point_size =5) +
   labs(subtitle = sub) +
   theme(plot.subtitle = element_text(size = 15, color = "black"))
@@ -223,12 +222,14 @@ wrap_plots(mds_plt) + plot_layout(guides = "collect")
 myelo <- sce[,sce$lvl0 == "myeloid" & 
                sce$experiment %in% c("ctrl","LPS") & 
                sce$timepoint == "4h"]
-mrk <- scoreMarkers(sub, groups = sub$experiment, BPPARAM = bp)
+sub <- sce[,sce$experiment %in% c("ctrl","LPS") & sce$timepoint == "4h"]
+sub <- logNormCounts(sub)
+mrk <- scran::scoreMarkers(sub, groups = sub$experiment, BPPARAM = bp)
 
 feat <- lapply(mrk, function(df) {
   as.data.frame(df) %>%
-    arrange(desc(median.logFC.detected)) %>%
-    head(10) %>%
+    arrange(desc(median.logFC.cohen)) %>%
+    head(20) %>%
     rownames()
 })
 feat <- unique(unlist(feat))
@@ -244,6 +245,32 @@ dot <- plotDots(sub,
         axis.text.x = element_text(angle = 90, vjust = 1,hjust = 1, color = "black"))
 dot
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

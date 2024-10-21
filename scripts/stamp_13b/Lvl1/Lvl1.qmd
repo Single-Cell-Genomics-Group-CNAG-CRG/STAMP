@@ -1,5 +1,5 @@
 ---
-title: "Annotation - Stamp_13a"
+title: "Annotation - Stamp_13b"
 subtitle: "Emanuele Pitino"
 date: "`r Sys.Date()`"
 format: 
@@ -17,8 +17,6 @@ editor_options:
   chunk_output_type: console
 execute:
   echo: true
-  fig-width: 16     
-  fig-height: 12 
 ---
 
 ### Libraries
@@ -49,12 +47,12 @@ source(glue("{dir}/scripts/misc/BIN.R"))
 ```
 
 ```{r}
-stamp <- "stamp_13a"
+stamp <- "stamp_13b"
 res_dir <- glue("{proj_dir}/data/{stamp}/processed")
-sce <- qread(glue("{res_dir}/anno_sce.qs"), nthreads = 8)
+sce <- qread(glue("{res_dir}/ist_sce.qs"), nthreads = 8)
 
 dir <- glue("{proj_dir}/data/{stamp}/Ist")
-unsup <- qread(glue("{dir}/unsup_20_25.qs"))
+unsup <- qread(glue("{dir}/unsup.qs"))
 ```
 
 
@@ -67,7 +65,7 @@ names(pal) <- unique(sce$label)
 ```
 
 # Principal Component Regression
-```{r}
+```{r, fig.width= 6, fig.height=4}
 .pcr <- \(sce, x) {
     y <- reducedDim(sce, "PCA")
     z <- summary(lm(y ~ sce[[x]]))
@@ -84,7 +82,7 @@ names(pal_pcr) <- unique(df$x)
 
 ggplot(df, aes(x = pc, y = r2, color = x)) +
   geom_line() +
-  geom_point() +
+  geom_point(size = 2) +
   theme_bw() + 
   scale_x_continuous(breaks = unique(df$pc)) +
   theme(panel.grid = element_blank(),
@@ -93,201 +91,302 @@ ggplot(df, aes(x = pc, y = r2, color = x)) +
         aspect.ratio = 1/2) +
   scale_color_manual(values = pal_pcr) +
   scale_fill_manual(values = pal_pcr)
-
 ```
 
-
-```{r}
+```{r, fig.width=8, fig.height=3}
 cd <- as.data.frame(colData(sce))
-df <- as.data.frame(table(cd$label,cd$experiment)) %>%
-  group_by(Var2) %>%
-  mutate(pct = round(Freq/ sum(Freq),4))
+var <- "sum"
 
-ggplot(df, aes(x = Var2, y = pct, fill = Var1)) +
-  geom_col() +
+boxp <- \(var){
+p <- ggplot(cd,aes(x = label, y = !!sym(var))) +
+  geom_boxplot(outlier.size = 0.01) +
   theme_bw() +
-  scale_fill_manual(values = pal, guide = guide_legend(ncol = 1)) +  # Single-column legend
-  scale_y_continuous(expand = c(0, 0)) +  # Remove empty space at top and bottom
-  theme(
-    panel.grid = element_blank(),
-    aspect.ratio = 3/1,
-    axis.text = element_text(size = 12, color = "black"),
-    text = element_text(size = 20, color = "black")
-  ) +
-  labs(x = "Experiment", y = "Proportion", fill = "Cluster") +
-  guides(fill = guide_legend(order = 1, ncol = 1)) 
-```
-
-
-```{r}
-stacked_bp <- \(var){
-  cd <- as.data.frame(colData(sce)) 
-  cd <- cd[cd$experiment == var,]
+  theme(axis.text = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 20, color = "black"),
+        aspect.ratio = 1/2) 
   
-  df <- as.data.frame(table(cd$label,cd$timepoint,cd$replicate)) %>%
-    group_by(Var2,Var3) %>%
-    mutate(pct = round(Freq/ sum(Freq),4)) %>%
-    ungroup()
-
-  ggplot(df, aes(x = Var3, y = pct, fill = Var1)) +
-    geom_col() +
-    theme_bw() +
-    scale_fill_manual(values = pal, guide = guide_legend(ncol = 1)) +  # Single-column legend
-    scale_y_continuous(expand = c(0, 0)) +  # Remove empty space at top and bottom
-    theme(
-      panel.grid = element_blank(),
-      aspect.ratio = 4/1,
-      axis.text = element_text(size = 12, color = "black"),
-      text = element_text(size = 20, color = "black")
-    ) +
-    labs(x = "Replicate", y = "Proportion", fill = "Cluster", title = var) +
-    guides(fill = guide_legend(order = 1, ncol = 1)) + 
-    facet_wrap(~Var2)
+  if(var == "sum" | var == "detected") {p <- p + scale_y_log10()}
+return(p)
 }
 
 
-wrap_plots(
-  stacked_bp("ctrl"),
-  stacked_bp("LPS"),
-  stacked_bp("aCD3aCD28"),
-  ncol = 3) +
-  plot_layout(guides = "collect", axis_titles  = "collect")
+boxp("sum")
+boxp("detected")
+boxp("nFeature_negprobes")
+boxp("nFeature_falsecode")
+boxp("nCount_negprobes")
+boxp("nCount_falsecode")
 
+
+mfi <- grep("Mean", colnames(cd), value = TRUE)
+mfi_plts <- list()
+
+for(i in mfi){
+  
+mfi_plts[[i]] <-  ggplot(cd,aes(x = label, y = asinh(!!sym(i)))) +
+  geom_boxplot(outlier.size = 0.01) +
+  theme_bw() +
+  theme(axis.text = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 20, color = "black"),
+        aspect.ratio = 1/2) 
+}
+mfi_plts
 ```
 
+# Annotation based on InSituType profiles and cell types proportions
+```{r}
+sce$lvl1[sce$label == "a"] <- "B"
+sce$lvl1[sce$label == "b"] <- "DCs"
+sce$lvl1[sce$label == "c"] <- "T_DC"
+sce$lvl1[sce$label == "d"] <- "TIM3+ CD8"
+sce$lvl1[sce$label == "e"] <- "plasmacells"
+sce$lvl1[sce$label == "f"] <- "PDL1+ mono."
+sce$lvl1[sce$label == "g"] <- "inflamm. mono."
+sce$lvl1[sce$label == "h"] <- "exhausted Th1"
+sce$lvl1[sce$label == "i"] <- "Th1"
+sce$lvl1[sce$label == "j"] <- "Activated DCs"
+sce$lvl1[sce$label == "k"] <- "Naive CD4"
+sce$lvl1[sce$label == "l"] <- "Naive CD8"
+
+sce$lvl0 <- ""
+sce$lvl0[sce$lvl1 %in% c("TIM3+ CD8","exhausted Th1","Th1","Naive CD4","Naive CD8")] <- "T"
+sce$lvl0[sce$lvl1 %in% c("B","plasmacells")] <- "B"
+sce$lvl0[sce$lvl1 %in% c("DCs","PDL1+ mono.","inflamm. mono.","Activated DCs")] <- "myeloid"
+sce$lvl0[sce$lvl1 == "T_DC"] <- "T_DC"
+```
+
+# Quality metrics per cell type
+```{r}
+cd <- as.data.frame(colData(sce))
+
+boxpl <- \(var,lvl){
+p <- ggplot(cd, aes(x = !!sym(lvl), y = !!sym(var))) +
+  geom_boxplot(outlier.size = 0.01, alpha = 0.4) +
+  theme_bw() +
+theme(panel.grid = element_blank(),
+      aspect.ratio = 2/3,
+      axis.text = element_text(color = "black", size = 14),
+      axis.title.y = element_text(color = "black", size = 20),
+      axis.title.x = element_blank(),
+      axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  guides(color = "none", fill = "none") 
+
+if(var == "sum") { p <- p + scale_y_log10() + labs(y = "nCounts", x = "") + 
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())}
+if(var == "detected") { p <- p + scale_y_log10() + labs(y = "nFeatures", x = "") + 
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())}
+if(var == "Area.um2") { p <- p + labs(y = "Area (um2)")}
+
+return(p)
+}
+
+wrap_plots(
+  boxpl("sum","lvl0"),
+  boxpl("detected","lvl0"),
+  boxpl("Area.um2","lvl0"),
+  ncol = 1
+  ) +
+  plot_layout(axis_titles = "collect")
+```
+
+
+```{r}
+feat <- c("IGHM","IGHD","MS4A1","CD79A","CD19",
+          "CXCL9","CCL22","LY75","CD40",
+          "KLF2","JUN","JUNB","FOS","CLEC12A",
+          "IL2RB","GNLY","HAVCR2","GZMA","NKG7",
+          "CD74","HLA-DRB","CD69","IL3RA","CXCL10",
+          "HLA-DPB1","S100A10","CD86",
+          "IL1B","IL6","IL1A","S100A9","S100A8","CLEC5A",
+          "IFNG","CD4","LIF","LAG3","CTLA4","IL2RA","CD3D","CD28",
+          "IL2","FASN","ICOS","CD3E",
+          "CSF2RA","CD274","CCL19","LAMP3","GAS6","THBS1",
+          "TCF7","NELL2","SELL",
+          "RORA","CD8A","CD8B")
+```
+
+
+```{r, fig.height=5}
+sce$lvl1 <- factor(sce$lvl1, levels = c("B",
+                                        "DCs",
+                                        "T_DC",
+                                        "TIM3+ CD8",
+                                        "plasmacells",
+                                        "PDL1+ mono.",
+                                        "inflamm. mono.",
+                                        "exhausted Th1",
+                                        "Th1",
+                                        "Activated DCs",
+                                        "Naive CD4",
+                                        "Naive CD8"))
+
+dot <- plotDots(sce, group = "lvl1", features = feat, scale = TRUE, center = TRUE) +
+  scale_color_gradient2("z-scaled\nmean expr.", low = "blue4", mid = "grey90", high = "red4") +
+  scale_size_continuous(
+    limits = c(0, 1),
+    breaks = seq(0, 1, 0.5),
+    range = c(0.5, 2)  # Increase these numbers to make dots bigger
+  ) +
+  theme_minimal(6) +
+  theme(
+    aspect.ratio = 1/4,
+    axis.text.y = element_text(color = "black", size = 7),
+    axis.text.x = element_text(
+      angle = 90,
+      hjust = 1,
+      vjust = 0.5,
+      color = "black",
+      size = 5
+    ),
+    panel.grid.major = element_line(linewidth = 0.1, color = "lightgrey"),
+    axis.title = element_blank(),
+    legend.key.size = unit(0.5, "lines") 
+  ) +
+  coord_flip()
+dot
+
+pdf("/Users/emanuelepitino/Desktop/stamp_13b/dot.pdf", width = 6)
+dot
+dev.off()
+```
 
 ## InSituType Profiles
 
 Normalize & log-transform the profiles
 ```{r}
-feat <- c("CD3E","CD3G","CD3D","CD8A","CD8B","CD4","IL2RA","FOXP3","CTLA4",
-          "KLRB1","KLRF1","KLRK1","NKG7","NCAM1",
-          "CD19","CD79A","IGHD","IGHG1","IGHM","IGHA1","MZB1",
-          "MS4A1","CSF1R","CD14","CD1C","FCGR3A/B")
-
-plotDots(sce, feat = feat, group = "label", scale = T, center = T) + 
-  coord_flip()
+norm <- unsup$profiles /  Matrix::colSums(unsup$profiles) # average
+norm <- norm + 1e-6
 ```
 
-```{r}
-df <- as.data.frame(colData(sce))
- plot_density(df, "Area.um2", "label", pal, "Features",150)
-```
+Calculate logFC
 
 ```{r}
-library(ggridges)
-cd <- as.data.frame(colData(sce))
-qcmet_ridges <- \(var){
-  # Default values to avoid undefined variable error
-  xlab <- ""
-  xmin <- 0
-  xmax <- 1000
-
-  # Assign values based on the `var` argument
-  if(var == "sum") {
-    xlab <- "nCount"; xmin <- 0.1; xmax <- 1000
-  } else if(var == "detected") {
-    xlab <- "nFeature"; xmin <- 0.1; xmax <- 1000
-  } else if(var == "Area.um2") {
-    xlab <- "Cell area (um2)"; xmin <- 10; xmax <- 200
+result <- norm 
+for (i in 1:nrow(norm)) {
+  for (j in 1:ncol(norm)) {
+    result[i, j] <- log2(norm[i, j] / mean(norm[i, -j]))
   }
-
-  # Compute the medians for each sample
-  medians <- cd %>%
-    group_by(sample) %>%
-    summarize(median_var = round(median(!!sym(var), na.rm = TRUE), 0))
-  
-  # Create a named vector of labels
-  labels_vector <- setNames(as.character(medians$median_var), medians$label)
-  
-  # Plot with adjusted y-axis labels
-  ggplot(cd, aes(x = !!sym(var), y = label, fill = label)) +
-    geom_density_ridges() +
-    scale_y_discrete(labels = labels_vector) +  # Adjust y-axis labels here
-    scale_fill_manual(values = pal) +
-    theme_bw() +
-    theme(
-      panel.grid = element_blank(),
-      axis.text = element_text(color = "black", size = 15),
-      axis.title = element_text(color = "black", size = 22),
-      legend.text = element_text(color = "black", size = 10),
-      legend.title = element_text(color = "black", size = 15),
-      axis.ticks.y = element_blank()
-    ) +
-    labs(x = xlab, fill = "sub-STAMP", y = "") +
-    guides(fill = guide_legend(
-      reverse = TRUE,
-      override.aes = list(color = NA)
-    )) +
-    scale_x_log10() 
 }
-
-wrap_plots(
-  qcmet_ridges("sum"),
-  qcmet_ridges("detected"),
-  qcmet_ridges("Area.um2"),
-  ncol = 3) +
-  plot_layout(guides = "collect")
-
 ```
 
+Remove outliers at 2.5 sd for better visualization
 
 ```{r}
-  xlab <- ""
-  xmin <- 0
-  xmax <- 1000
-  var <- "detected"
+x <- result[feat,]
 
-library(ggridges)
-library(forcats)  # For fct_reorder
-
-# Step 1: Calculate the median value for each label
-cd <- cd %>%
-  group_by(label) %>%
-  mutate(median_var = round(median(!!sym(var), na.rm = TRUE), 0)) %>%
-  ungroup()
-
-# Step 2: Set 'label' as a factor ordered by decreasing median_var
-cd <- cd %>%
-  mutate(label = fct_reorder(label, median_var, .desc = F))
-
-# Step 3: Create a named vector of labels for y-axis
-labels_vector <- setNames(as.character(cd$median_var), cd$label)
-
-# Plot with adjusted y-axis labels
-ggplot(cd, aes(x = !!sym(var), y = label, fill = label)) +
-  geom_density_ridges() +
-  scale_y_discrete(labels = labels_vector) +  # Adjust y-axis labels here
-  scale_fill_manual(values = pal) +
-  theme_bw() +
-  theme(
-    panel.grid = element_blank(),
-    axis.text = element_text(color = "black", size = 15),
-    axis.title = element_text(color = "black", size = 22),
-    legend.text = element_text(color = "black", size = 10),
-    legend.title = element_text(color = "black", size = 15),
-    axis.ticks.y = element_blank()
-  ) +
-  labs(x = xlab, fill = "sub-STAMP", y = "") +
-  guides(fill = guide_legend(
-    reverse = TRUE,
-    override.aes = list(color = NA)
-  )) +
-  scale_x_log10()
-  
+z <- \(x, th=2.5) {
+    if (is.null(dim(x))) {
+        x[x < 0] <- 0
+        sd <- sd(x, na.rm=TRUE)
+        x <- x-mean(x, na.rm=TRUE)
+        if (sd != 0) x <- x/sd
+    } else {
+        mus <- colMeans(x)
+        sds <- colSds(x)
+        x <- sweep(x, 2, mus, `-`)
+        x <- sweep(x, 2, sds, `/`)
+    }
+    x[x > +th] <- +th
+    x[x < -th] <- -th
+    return(x)
+}
+mtx_scaled <- z(x)
 ```
 
+Plot
 
+```{r, fig.width = 15, fig.height= 5}
+library(reshape2)
+library(ggdendro)
 
+# Perform hierarchical clustering on columns
+column_dist_euclidean <- dist(t(mtx_scaled), method = "euclidean")  # Use transpose to cluster columns
+column_hclust_complete <- hclust(column_dist_euclidean, method = "average")
 
+# Reorder the columns based on clustering
+ordered_columns <- column_hclust_complete$order
+mtx_scaled_ordered <- mtx_scaled[, ordered_columns]
+colnames(mtx_scaled_ordered) <- colnames(mtx_scaled)[ordered_columns]
 
+# Change annotation
+colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "a"] <- "B"
+colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "b"] <- "DCs"
+colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "c"] <- "T_DC"
+colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "d"] <- "TIM3+ CD8"
+colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "e"] <- "plasmacells"
+colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "f"] <- "PDL1+ mono."
+colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "g"] <- "inflamm. mono."
+colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "h"] <- "exhausted Th1"
+colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "i"] <- "Th1"
+colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "j"] <- "Activated DCs"
+colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "k"] <- "Naive CD4"
+colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "l"] <- "Naive CD8"
 
+# Convert the matrix into a format suitable for ggplot
+mtx_melted <- melt(t(mtx_scaled_ordered))
 
+# Reorder annotation factors
+mtx_melted$Var1 <- factor(mtx_melted$Var1, levels = c("B",
+                                        "DCs",
+                                        "T_DC",
+                                        "TIM3+ CD8",
+                                        "plasmacells",
+                                        "PDL1+ mono.",
+                                        "inflamm. mono.",
+                                        "exhausted Th1",
+                                        "Th1",
+                                        "Activated DCs",
+                                        "Naive CD4",
+                                        "Naive CD8"))
 
+# Reorder genes factors
+var2 <- c("IGHM", "IGHD", "MS4A1", "CD79A", "CD19", "CXCL9", "CCL22", 
+          "LY75", "CD40", "KLF2", "JUN", "JUNB", "FOS", "CLEC12A", 
+          "IL2RB", "GNLY", "HAVCR2", "GZMA", "NKG7", "CD74", "HLA-DRB", 
+          "CD69", "IL3RA", "CXCL10", "HLA-DPB1", "S100A10", "CD86", "IL1B", 
+          "IL6", "IL1A", "S100A9", "S100A8", "CLEC5A", "IFNG", "CD4", 
+          "LIF", "LAG3", "CTLA4", "IL2RA", "CD3D", "CD28", "IL2", 
+          "FASN", "ICOS", "CD3E", "CSF2RA", "CD274", "CCL19", "LAMP3", 
+          "GAS6", "THBS1", "TCF7", "NELL2", "SELL", "RORA", "CD8A", 
+          "CD8B")
+
+mtx_melted$Var2 <- factor(mtx_melted$Var2, 
+                        levels = c("IGHM", "IGHD", "MS4A1", "CD79A", "CD19", "CXCL9", "CCL22",
+                                   "LY75", "CD40", "KLF2", "JUN", "FOS", "JUNB", "CLEC12A","IL2RB", "GNLY",
+                                   "HAVCR2", "GZMA", "NKG7", "CD74", "HLA-DRB", "CD69", "IL3RA", "CXCL10",
+                                   "HLA-DPB1","CSF2RA", "CD274", "S100A10", "CD86","IL1B","IL6", "IL1A", "S100A9",
+                                   "S100A8", "CLEC5A", "IFNG","LIF", "LAG3", "CTLA4", "IL2RA",
+                                   "CD3D", "CD28","CD4", "IL2","FASN", "ICOS", "CD3E", "CCL19",
+                                   "LAMP3", "GAS6", "THBS1", "NELL2", "SELL","TCF7", "RORA", "CD8A","CD8B"))
+# Create the heatmap using ggplot2
+hm <- ggplot(mtx_melted, aes(Var1, Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "navy", mid = "white", high = "red", midpoint = 0, name = "expression") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = 8, angle = 45, hjust = 1, vjust = 1, color = "black"),
+    axis.text.y = element_text(size = 9, color = "black"),
+    axis.title = element_blank(),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    panel.grid = element_blank(),
+    aspect.ratio = 1/5
+  ) +
+  coord_flip() +
+  labs(x = "", y = "")
+  hm
+  
+pdf("/Users/emanuelepitino/Desktop/stamp_13b/hm.pdf", width = 10)
+hm
+dev.off()
+ 
+```
 
 ```{r}
 dir <- glue("{proj_dir}/data/{stamp}/processed")
-qsave(sce, file = glue("{dir}/anno_sce.qs"), nthreads = 8)
+qsave(sce, file = glue("{dir}/anno_sce_P1.qs"), nthreads = 8)
 ```
 
 ```{r}

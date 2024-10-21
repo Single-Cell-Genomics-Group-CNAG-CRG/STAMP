@@ -1,0 +1,117 @@
+---
+title: "Curated markers - CosMx iPSC - Stamp 7b"
+subtitle: "Emanuele Pitino"
+date: "`r Sys.Date()`"
+format: 
+  html:
+    theme: superhero
+    smooth-scroll: true
+    code-fold: true
+    self-contained: true
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+editor: source
+editor_options: 
+  chunk_output_type: console
+execute:
+  echo: true
+  fig-width: 9     
+  fig-height: 6 
+---
+This document provides a visualization of curated markers for ectoderm - mesoderm - endoderm lineages in iPSCs.
+
+## Setup
+### Libraries
+```{r}
+suppressPackageStartupMessages({
+library(SingleCellExperiment)
+library(dplyr)
+library(here)
+library(scater)
+library(scuttle)
+library(scran)
+library(data.table)
+library(glue)
+library(qs)
+library(scales)
+})
+```
+
+### Paths
+```{r}
+dir <- glue("{here()}")
+source(glue("{dir}/scripts/misc/paths.R"))
+source(glue("{dir}/scripts/misc/BIN.R"))
+
+sample <- "iPSCs"
+stamp <- "Stamp_7b"
+```
+
+## Load data
+```{r}
+res_dir <- glue("{proj_dir}/data/{stamp}/{sample}")
+sce <- qread(glue("{res_dir}/clustered_sce.qs"), nthreads = 8)
+sce
+```
+
+## Read and clean signatures file
+```{r}
+# Read in the signatures file
+file <- suppressMessages({as.data.frame(readxl::read_xlsx(glue("{dir}/data/stamp_7b/curated_markers/curated_list_tri_lineages.xlsx")))})
+
+ecto <- c(file$Ectoderm,"BRN2") %>% .[!is.na(.)] # add a missing gene (formatting)
+meso <- file$Mesoderm %>% .[!is.na(.)]
+endo <- file$Endoderm %>% .[!is.na(.)]
+```
+
+## Ecto
+```{r}
+feat <- ecto
+dot_ecto <- plotDots(sce, group = "label", features = intersect(feat,rownames(sce)), 
+                scale = T, center = T) + coord_flip() +
+  theme(aspect.ratio = 2/1,
+        axis.text.x = element_text(angle = 90, vjust = 1,hjust = 1, color = "black")) 
+dot_ecto
+```
+
+## Meso
+```{r}
+feat <- meso
+dot_meso <- plotDots(sce, group = "label", features = intersect(feat,rownames(sce)), 
+                scale = T, center = T) + coord_flip() +
+  theme(aspect.ratio = 1/2,
+        axis.text.x = element_text(angle = 90, vjust = 1,hjust = 1, color = "black")) 
+dot_meso
+```
+
+## Endo
+```{r}
+feat <- endo
+dot_endo <- plotDots(sce, group = "label", features = intersect(feat,rownames(sce)), 
+                scale = T, center = T) + coord_flip() +
+  theme(aspect.ratio = 1/2,
+        axis.text.x = element_text(angle = 90, vjust = 1,hjust = 1, color = "black")) 
+dot_endo
+```
+
+```{r}
+# ecto
+pdf("/Users/emanuelepitino/Desktop/tmp_long/stamp_7b_iPSC/cosmx/dotplot ectoderm markers.pdf",
+    width = 8)
+dot_ecto
+dev.off()
+
+# meso
+pdf("/Users/emanuelepitino/Desktop/tmp_long/stamp_7b_iPSC/cosmx/dotplot mesoderm markers.pdf", width = 8)
+dot_meso
+dev.off()
+
+# endo
+pdf("/Users/emanuelepitino/Desktop/tmp_long/stamp_7b_iPSC/cosmx/dotplot endoderm markers.pdf", width = 8)
+dot_endo
+dev.off()
+```
+
+

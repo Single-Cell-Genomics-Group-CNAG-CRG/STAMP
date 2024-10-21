@@ -267,15 +267,14 @@ qcmet_hist <- \(var, xmin,xmax){
 
 outdir <- glue("{plots_dir}/QC")
 dir.create(outdir,showWarnings = F,recursive = T)
-pdf(glue("{outdir}/qc_hist.pdf"), height = 7, width = 4)
+pdf(glue("{outdir}/qc_hist.pdf"), height = 2, width = 10)
 wrap_plots(
   qcmet_hist("sum",0,13000),
   qcmet_hist("detected",0,1000),
   qcmet_hist("Area.um2",0,1000),
-  ncol = 1) +
+  ncol = 3) +
   plot_layout(axis_titles = "collect")
 dev.off()
-
 ```
 
 # Filter

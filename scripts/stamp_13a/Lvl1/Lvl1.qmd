@@ -381,11 +381,8 @@ hm <- ggplot(mtx_melted, aes(Var1, Var2, fill = value)) +
 pdf("/Users/emanuelepitino/Desktop/stamp_13a/hm.pdf", width = 10)
 hm
 dev.off()
- 
- ```
+```
 
-
-```{r, fig.width = 15, fig.height= 5}
 ```{r}
 dir <- glue("{proj_dir}/data/{stamp}/processed")
 qsave(sce, file = glue("{dir}/anno_sce_P1.qs"), nthreads = 8)

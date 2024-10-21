@@ -215,24 +215,45 @@ mtx_scaled <- z(x)
 Plot
 
 ```{r}
-# Create the heatmap
-color_function <- circlize::colorRamp2(c(min(mtx_scaled), 0, max(mtx_scaled)), c("navy", "white", "red"))
-hm <- ComplexHeatmap::Heatmap(t(mtx_scaled),
-              name = "expression",
-              cluster_rows = T,
-              cluster_columns = T,
-            #  cluster_columns = as.dendrogram(column_hclust_complete),
-              show_row_names = TRUE,
-              show_column_names = TRUE,
-              show_row_dend = FALSE,
-              show_column_dend = FALSE,
-              col = color_function,
-              row_names_side = "left",
-              height = unit(4,"cm"),
-              column_names_gp = grid::gpar(fontsize = 8))
-              #row_order = match(c("g","d","i","e","i","e","d","f","k","h","g","j"), rownames(t(mtx_scaled))))
+library(reshape2)
+library(ggdendro)
 
+# Perform hierarchical clustering on columns
+column_dist_euclidean <- dist(t(mtx_scaled), method = "euclidean")  # Use transpose to cluster columns
+column_hclust_complete <- hclust(column_dist_euclidean, method = "average")
+
+# Reorder the columns based on clustering
+ordered_columns <- column_hclust_complete$order
+mtx_scaled_ordered <- mtx_scaled[, ordered_columns]
+colnames(mtx_scaled_ordered) <- colnames(mtx_scaled)[ordered_columns]
+
+# Convert the matrix into a format suitable for ggplot
+mtx_melted <- melt(t(mtx_scaled_ordered))
+
+mtx_melted$Var1 <- factor(mtx_melted$Var1, levels = rev(c("a","b","c","d","e","f","g",
+                                                      "h","i","j")))
+
+# Create the heatmap using ggplot2
+hm <- ggplot(mtx_melted, aes(Var1, Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "navy", mid = "white", high = "red", midpoint = 0, name = "expression") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = 8, angle = 45, hjust = 1, vjust = 1, color = "black"),
+    axis.text.y = element_text(size = 9, color = "black"),
+    axis.title = element_blank(),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    panel.grid = element_blank(),
+    aspect.ratio = 1/5
+  ) +
+  coord_flip() +
+  labs(x = "", y = "")
+  hm
+
+pdf("/Users/emanuelepitino/Desktop/tmp_long/stamp_7b_iPSC/cosmx/hm_ist_prof.pdf", width = 15)
 hm
+dev.off()
 ```
 
 # Save sce
