@@ -89,6 +89,7 @@ gc()
 ## LogNorm
 ```{r}
 #sce <- sce[,sample(colnames(sce),1000)]
+sce <- sce[,sce$sample != "endoderm"]
 sce <- logNormCounts(sce)
 ```
 
@@ -169,7 +170,7 @@ df <- df[sample(nrow(df)), ] # shuffle
 pal <- Polychrome::createPalette(n_distinct(sce$sample), c("#FBB4AE", "#B3CDE3", "#CCEBC5"))
 names(pal) <- unique(sce$sample)
 
-df$sample <- factor(df$sample, levels = c("iPSC_parental","mesoderm","ectoderm","endoderm"))
+df$sample <- factor(df$sample, levels = c("iPSC_parental","mesoderm","ectoderm"))
 
 ggplot(df, aes(x = PC1, y = PC2, color = sample)) +
   ggrastr::rasterise(geom_point(shape = 16, size = 0.1), dpi = 1000) +
@@ -230,7 +231,7 @@ df <- as.data.frame(table(sce$sample,sce$label)) %>%
       group_by(Var1) %>%
       mutate(Proportion = round((Freq / sum(Freq)) * 100, 2))
 
-df$Var1 <- factor(df$Var1, levels = c("iPSC_parental","endoderm","mesoderm","ectoderm"))
+df$Var1 <- factor(df$Var1, levels = c("iPSC_parental","mesoderm","ectoderm"))
 ggplot(df, aes( x = Var1 , y = Proportion, fill = Var2)) + 
   geom_col() +
   scale_fill_manual(values = pal) +

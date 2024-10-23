@@ -131,122 +131,126 @@ prop
 dev.off()
 ```
 
-## Differential Expression ctrl vs LPS 4h
+## Identify TLR4 population in myeloid compartment and ctrl vs LPS
 ```{r}
-sub <- sce[,sce$experiment %in% c("ctrl","LPS") & sce$timepoint == "4h"]
-sub$experiment <- as.factor(as.character(sub$experiment))
-```
-
-```{r}
-# Combine 'experiment' and 'lvl1' into a single group variable
-sub$group <- interaction(sub$experiment, sub$lvl1, sep = ".")
-
-# Define the groups for 'scoreMarkers'
-groups <- sub$group
-
-# Get unique experiments and lvl1 levels
-experiments <- unique(sub$experiment)
-lvl1_levels <- unique(sub$lvl1)
-
-# Initialize an empty data frame for pairings
-pairings <- data.frame(first = character(), second = character(), stringsAsFactors = FALSE)
-
-# Generate pairings for each lvl1 level
-for (lvl in lvl1_levels) {
-  # Get all combinations of experiments for the current lvl1
-  if (length(experiments) >= 2) {
-    exp_pairs <- t(combn(experiments, 2))
-    for (i in 1:nrow(exp_pairs)) {
-      group1 <- paste(exp_pairs[i, 1], lvl, sep = ".")
-      group2 <- paste(exp_pairs[i, 2], lvl, sep = ".")
-      # Add the pair to the pairings data frame
-      pairings <- rbind(pairings, data.frame(first = group1, second = group2, stringsAsFactors = FALSE))
-    }
-  }
-}
-# Run 'scoreMarkers' with the generated 'pairings'
-mrk <- scran::scoreMarkers(sub, groups = groups, pairings = pairings, BPPARAM = bp)
-```
-
-```{r}
-top_markers <- lapply(mrk, function(res) {
-  res[order(res$self.average, decreasing = TRUE), ][1:10, ]  # Get top 10 markers based on FDR
-})
-```
-
-
-```{r}
-lps <- as.data.frame(mrk[["LPS"]]) %>% select(self.detected,self.average,median.logFC.detected) %>%
-  arrange(desc(self.detected))
-
-feat <- lapply(mrk, function(df) {
-  as.data.frame(df) %>%
-    arrange(desc(self.average)) %>%
-    head(15) %>%
-    rownames()
-})
-feat <- unique(unlist(feat))
-
-dot <- plotDots(sub, 
-                group = "experiment", features = feat, scale = F, center = F) + coord_flip() +
-  theme(aspect.ratio = 1/5,
-        axis.text.x = element_text(angle = 90, vjust = 1,hjust = 1, color = "black"))
-dot
-```
-
-# MDS
-```{r}
-library(scuttle)
 sub <- sce[,sce$experiment %in% c("ctrl","LPS") & sce$lvl0 == "myeloid"]
-sub <- sce[,sce$experiment %in% c("ctrl","LPS")]
-sub <- logNormCounts(sub)
-sub$id <- paste0(sub$replicate,"_",sub$lvl1,"_",sub$timepoint,"_",sub$experiment)
-agg <- aggregateAcrossCells(sub, ids = sub$id, use.assay.type = "logcounts", statistics = "mean")
+feats <- c("TLR1","TLR2","TLR3","TLR4","TLR5",
+           "TLR7","TLR8")
 
-mds <- runMDS(agg)
+tlr4_pos <- plotDots(sub, group = "lvl1", features = feats,
+         scale = T, center = T) +
+  theme(aspect.ratio = 3/1) +
+  scale_color_gradient2("z-scored\nmean expr.", low = "blue4", mid = "grey90", high = "red4") +
+  scale_size_continuous(
+    limits = c(0, 1),
+    breaks = seq(0, 1, 0.5),
+    range = c(1, 5)  # Increase these numbers to make dots bigger
+  ) +
+  theme_minimal(6) +
+  theme(
+    aspect.ratio = 1.5/1,
+    axis.text.y = element_text(color = "black", size = 8),
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1,
+      vjust = 1,
+      color = "black",
+      size = 7
+    ),
+    panel.grid.major = element_line(linewidth = 0.1, color = "lightgrey"),
+    axis.title = element_blank(),
+    legend.key.size = unit(0.5, "lines") 
+  ) +
+  coord_flip()
 
-mds_plt <- list()
-for(sub in unique(mds$lvl1)){
+pdf("/Users/emanuelepitino/Desktop/stamp_13a/tlr4_pos.pdf", height = 2) # ctrl and lps only
+tlr4_pos
+dev.off()
+```
+
+# Check TLR4 expression in CTRL and LPS experiments in act. mono.
+
+```{r}
+sub <- sce[,sce$experiment %in% c("ctrl","LPS") & sce$lvl1 == "act. mono."]
+feats <- c("TLR1","TLR2","TLR3","TLR4","TLR5",
+           "TLR7","TLR8")
+
+tlr4_act_mono <- plotDots(sub, group = "sample", features = "TLR4",
+         scale = F, center = T) +
+  theme(aspect.ratio = 3/1) +
+  scale_color_gradient2("z-scored\nmean expr.", low = "blue4", mid = "grey90", high = "red4") +
+  scale_size_continuous(
+    limits = c(0, 1),
+    breaks = seq(0, 1, 0.5),
+    range = c(1, 5)  # Increase these numbers to make dots bigger
+  ) +
+  theme_minimal(6) +
+  theme(
+    aspect.ratio = 1.5/1,
+    axis.text.y = element_text(color = "black", size = 8),
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1,
+      vjust = 1,
+      color = "black",
+      size = 7
+    ),
+    panel.grid.major = element_line(linewidth = 0.1, color = "lightgrey"),
+    axis.title = element_blank(),
+    legend.key.size = unit(0.5, "lines") 
+  ) +
+  coord_flip()
+
+tlr4_act_mono
+
+#pdf("/Users/emanuelepitino/Desktop/stamp_13a/tlr4_pos.pdf", height = 2) # ctrl and lps only
+#tlr4_pos
+#dev.off()
+```
+
+```{r}
+sub <- sce[,sce$lvl1 == "act. mono." & sce$experiment != "aCD3aCD28"]
+
+
+feats <- c(
+  # Early Response Genes (4h)
+  "TNF", "IL1B", "IL6", "IL8", "CXCL8", "IL12A", "IL12B",
+  "CCL2", "CCL3", "CCL4", "CXCL10", "PTGS2", "NOS2",
+  "NFKBIA", "FOS", "JUN", "EGR1", "CD80", "CD86", "CD40",
   
-mds_plt[[sub]]<- plotMDS(mds[,mds$lvl1 == sub], 
-        size_by = "replicate", color_by = "experiment", shape_by = "timepoint", point_size =5) +
-  labs(subtitle = sub) +
-  theme(plot.subtitle = element_text(size = 15, color = "black"))
-}
+  # Late Response Genes (24h)
+  "IL10", "TGFB1", "IFNB1", "IFIT1", "IFIT2", "IFIT3",
+  "OAS1", "OAS2", "OAS3", "SOCS1", "SOCS3", "IRF1", "IRF7",
+  "HLA-DRA", "HLA-DRB1", "CD83", "MMP9", "VEGFA",
+  
+  # Common Genes (Both Time Points)
+  "NFKB1", "RELA", "SOD2", "TNFAIP3"
+)
 
-wrap_plots(mds_plt) + plot_layout(guides = "collect")
+plotDots(sub, group = "sample", features = intersect(feats, rownames(sce)),
+         scale = F, center = T) +
+  theme(aspect.ratio = 3/1) +
+  scale_color_gradient2("centered\nmean expr.", low = "blue4", mid = "grey90", high = "red4") +
+  scale_size_continuous(
+    limits = c(0, 1),
+    breaks = seq(0, 1, 0.5),
+    range = c(1, 5)  # Increase these numbers to make dots bigger
+  ) +
+  theme_minimal(6) +
+  theme(
+    aspect.ratio = 1/6,
+    axis.text.y = element_text(color = "black", size = 8),
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1,
+      vjust = 1,
+      color = "black",
+      size = 7
+    ),
+    panel.grid.major = element_line(linewidth = 0.1, color = "lightgrey"),
+    axis.title = element_blank(),
+    legend.key.size = unit(0.5, "lines") 
+  ) +
+  coord_flip()
 ```
 
-
-
-```{r}
-myelo <- sce[,sce$lvl0 == "myeloid" & 
-               sce$experiment %in% c("ctrl","LPS") & 
-               sce$timepoint == "4h"]
-mrk <- scoreMarkers(sub, groups = sub$experiment, BPPARAM = bp)
-
-feat <- lapply(mrk, function(df) {
-  as.data.frame(df) %>%
-    arrange(desc(median.logFC.detected)) %>%
-    head(10) %>%
-    rownames()
-})
-feat <- unique(unlist(feat))
-
-
-
-
-#feat <- grep("TLR", rownames(myelo), value = TRUE)
-sub <- sce[,sce$experiment %in% c("LPS","ctrl") & sce$lvl0 == "myeloid" & sce$timepoint == "24h"]
-dot <- plotDots(sub, 
-                group = "experiment", features = feat, scale = F, center = F) + coord_flip() +
-  theme(aspect.ratio = 1/5,
-        axis.text.x = element_text(angle = 90, vjust = 1,hjust = 1, color = "black"))
-dot
-```
-
-
-
-```{r}
-sessionInfo()
-```

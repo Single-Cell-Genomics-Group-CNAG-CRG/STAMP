@@ -23,15 +23,17 @@ source(glue("{dir}/scripts/misc/BIN.R"))
 res_dir <- glue("{proj_dir}/data/{stamp}/{sample}")
 sce <- qread(glue("{res_dir}/clustered_sce.qs"))
 
-sce$cluster[sce$label == "a"] <- "M1"
-sce$cluster[sce$label == "b"] <- "P1"
-sce$cluster[sce$label == "c"] <- "P2"
-sce$cluster[sce$label == "d"] <- "M2"
-sce$cluster[sce$label == "e"] <- "EN1"
-sce$cluster[sce$label == "f"] <- "M2"
-sce$cluster[sce$label == "g"] <- "M2"
-sce$cluster[sce$label == "h"] <- "EN2"
-sce$cluster[sce$label == "i"] <- "EN3"
-sce$cluster[sce$label == "j"] <- "EC1"
+sce$cluster[sce$label == "d"] <- "amnion-like"
+#sce$cluster[sce$label == "a"] <- "mesoderm"
+sce$cluster[sce$label == "a"] <- "pluripotent"
+sce$cluster[sce$label == "h"] <- "pluripotent"
+sce$cluster[sce$label == "g"] <- "BMP-induced prog."
+#sce$cluster[sce$label == "d"] <- "mesoderm"
+sce$cluster[sce$label == "f"] <- "undiff."
+#sce$cluster[sce$label == "f"] <- "mesoderm"
+sce$cluster[sce$label == "c"] <- "late meso."
+sce$cluster[sce$label == "b"] <- "late meso."
+#sce$cluster[sce$label == "g"] <- "mesoderm"
+sce$cluster[sce$label == "e"] <- "ectoderm"
 
 qsave(sce, file = glue("{res_dir}/anno_sce.qs"), nthreads = 8)

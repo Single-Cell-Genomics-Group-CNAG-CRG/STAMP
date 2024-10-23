@@ -3,6 +3,7 @@ library(patchwork)
 library(ggplot2)
 library(qs)
 library(here)
+library(glue)
 
 dir <- glue("{here()}")
 source(glue("{dir}/scripts/misc/paths.R"))
@@ -66,25 +67,27 @@ mtx_scaled_ordered <- mtx_scaled[, ordered_columns]
 colnames(mtx_scaled_ordered) <- colnames(mtx_scaled)[ordered_columns]
 
 # Change annotation
-colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "a"] <- "M1"
-colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "b"] <- "P1"
-colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "c"] <- "P2"
-colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "d"] <- "M2"
-colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "e"] <- "EN1"
-colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "f"] <- "M2"
-colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "g"] <- "M2"
-colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "h"] <- "EN2"
-colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "i"] <- "EN3"
-colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "j"] <- "EC1"
+colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "a"] <- "amnion-precursors"
+#colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "a"] <- "mesoderm"
+colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "b"] <- "pluripotent"
+colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "c"] <- "pluripotent"
+colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "d"] <- "BMP-induced Prog."
+#colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "d"] <- "mesoderm"
+colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "e"] <- "endoderm"
+colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "f"] <- "mesoderm"
+colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "g"] <- "late meso."
+#colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "g"] <- "mesoderm"
+colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "h"] <- "endoderm"
+colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "i"] <- "endoderm"
+colnames(mtx_scaled_ordered)[colnames(mtx_scaled_ordered) == "j"] <- "ectoderm"
 
 # Convert the matrix into a format suitable for ggplot
 mtx_melted <- melt(t(mtx_scaled_ordered))
 
 # Reorder annotation factors
-mtx_melted$Var1 <- factor(mtx_melted$Var1, levels = c("P1","P2",
-                                                      "EC1",
-                                                      "M1","M2",
-                                                      "EN1","EN2","EN3"))
+mtx_melted$Var1 <- factor(mtx_melted$Var1, levels = rev(c("pluripotent","endoderm",
+                                                      "ectoderm",
+                                                      "mesoderm")))
 
 # Reorder genes factors
 var2 <- c("IGFBP7", "APOA1", "PPARG", "TTR", "CACNA1C", "INHBB", "NPR1", 
@@ -99,12 +102,12 @@ var2 <- c("IGFBP7", "APOA1", "PPARG", "TTR", "CACNA1C", "INHBB", "NPR1",
 mtx_melted$Var2 <- factor(mtx_melted$Var2, 
                           levels = c("INHBB", "NPR1","CMKLR1", "IL1A", "CD69", "FAP",
                                      "TNFSF8", "ITK", "CD40LG","C5AR2",
+                                     "CCL3/L1/L3","LIF", "FGR", "IL34", "IL18R1",
                                      "NRG1", "PTGS1", "EPHA4", "BMP3", "NR2F2",
-                                     "IGFBP7", "APOA1", "PPARG", "TTR", "CACNA1C",
                                      "WNT9A", "LAMA4", "COL5A3","LY75", "LDHA",
+                                     "IGFBP7", "APOA1", "PPARG", "TTR", "CACNA1C",
                                      "PDGFB","DHRS2", "SPOCK2", "MST1R", "ACTG2",
-                                     "HLA-DPB1", "TFEB", "INS", "KLRF1", "CASR",
-                                     "CCL3/L1/L3","LIF", "FGR", "IL34", "IL18R1"))
+                                     "HLA-DPB1", "TFEB", "INS", "KLRF1", "CASR"))
 mtx_melted <- na.omit(mtx_melted)
 # Create the heatmap using ggplot2
 hm <- ggplot(mtx_melted, aes(Var1, Var2, fill = value)) +

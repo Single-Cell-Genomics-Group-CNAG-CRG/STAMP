@@ -21,7 +21,9 @@ source(glue("{dir}/scripts/misc/paths.R"))
 source(glue("{dir}/scripts/misc/BIN.R"))
 
 res_dir <- glue("{proj_dir}/data/{stamp}/{sample}")
-sce <- qread(glue("{res_dir}/qc_sce.qs"))
+sce <- qread(glue("{res_dir}/anno_sce.qs"))
+
+sce <- sce[,sce$sample != "endoderm"]
 sce
 
 counts <- t(counts(sce))

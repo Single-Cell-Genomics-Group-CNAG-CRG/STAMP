@@ -24,14 +24,11 @@ outdir <- glue("{proj_dir}/data/{stamp}/processed/flex/iPSC/{sample}")
 sce <- qread(glue("{outdir}/proc_sce.qs"), nthreads = 8)
 sce
 
-sce$cluster[sce$label == "1"] <- "EC1"
-sce$cluster[sce$label == "2"] <- "EC1"
-sce$cluster[sce$label == "3"] <- "M2"
-sce$cluster[sce$label == "4"] <- "EN2"
-sce$cluster[sce$label == "5"] <- "EN3"
-sce$cluster[sce$label == "6"] <- "EN1"
-sce$cluster[sce$label == "7"] <- "P1"
-sce$cluster[sce$label == "8"] <- "P2"
-sce$cluster[sce$label == "9"] <- "M1"
+sce$cluster[sce$label == "1"] <- "ectoderm"
+sce$cluster[sce$label == "2"] <- "ectoderm"
+sce$cluster[sce$label == "3"] <- "amnion-like"
+sce$cluster[sce$label == "4"] <- "pluripotent"
+sce$cluster[sce$label == "5"] <- "pluripotent"
+sce$cluster[sce$label == "6"] <- "late meso."
 
 qsave(sce, file = glue("{outdir}/anno_sce.qs"), nthreads = 8)

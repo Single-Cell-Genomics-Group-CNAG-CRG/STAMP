@@ -22,14 +22,10 @@ flex$tech <- "flex"
 
 
 ##  marker genes
-mrk <- c("INHBB", "NPR1","CMKLR1", "IL1A", "CD69", "FAP",
-  "TNFSF8", "ITK", "CD40LG","C5AR2",
-  "NRG1", "PTGS1", "EPHA4", "BMP3", "NR2F2",
-  "IGFBP7", "APOA1", "PPARG", "TTR", "CACNA1C",
-  "WNT9A", "LAMA4", "COL5A3","LY75", "LDHA",
-  "PDGFB","DHRS2", "SPOCK2", "MST1R", "ACTG2",
-  "HLA-DPB1", "TFEB", "INS", "KLRF1", "CASR",
-  "CCL3/L1/L3","LIF", "FGR", "IL34", "IL18R1")
+mrk <- c("GATA3","IGFBP7","KRT80","KRT19","APOA1","VTN",
+         "DLL1","SOX2","BMP4",
+         "WNT5A","PDGFRA","KDR","TTN","FOXF1","SNAI1",
+         "WNT3","POU5F1","FGF2")
 
 ### CORR SPLIT BY CELL TYPE
 # Take matrices
@@ -82,112 +78,112 @@ names(agg_fl)[names(agg_fl) == "value"] <- "flex"
 df <- merge(agg_cs, agg_fl, by = c("gene", "variable"), all = TRUE)
 
 
-corr_plot <- function(df,subset){
+corr_plot <- function(df, subset) {
   
-  genes_p1 <- c("INHBB", "NPR1","CMKLR1", "IL1A", "CD69")
-  genes_p2 <- c("FAP","TNFSF8", "ITK", "CD40LG","C5AR2")
-  genes_ec1 <- c("NRG1", "PTGS1", "EPHA4", "BMP3", "NR2F2")
-  genes_m1 <- c("IGFBP7", "APOA1", "PPARG", "TTR", "CACNA1C")
-  genes_m2 <- c("WNT9A", "LAMA4", "COL5A3","LY75", "LDHA")
-  genes_n1 <- c("PDGFB","DHRS2", "SPOCK2", "MST1R", "ACTG2")
-  genes_n2 <- c("HLA-DPB1", "TFEB", "INS", "KLRF1", "CASR")
-  genes_n3 <- c("CCL3/L1/L3","LIF", "FGR", "IL34", "IL18R1")
+  genes_amnion_like <- c("GATA3", "IGFBP7", "KRT80", "KRT19", "APOA1", "VTN")
+  genes_BMP <- c("GATA3", "KRT19", "DLL1", "BMP4")
+  genes_ecto <- c("DLL1", "SOX2")
+  genes_late_meso <- c("BMP4", "WNT5A", "PDGFRA", "KDR", "TTN", "FOXF1", "SNAI1", "WNT3")
+  genes_endo <- c("WNT3", "POU5F1", "FGF2")
+  genes_pluri <- c("WNT3", "POU5F1", "FGF2")
+  genes_undiff <- c("WNT3", "POU5F1", "FGF2")
   
+  # Select the appropriate marker genes based on the subset
+  if (subset == "amnion-like") { feat_color <- genes_amnion_like }
+  if (subset == "endoderm") { feat_color <- genes_endo }
+  if (subset == "BMP-induced prog.") { feat_color <- genes_BMP }
+  if (subset == "late meso.") { feat_color <- genes_late_meso }
+  if (subset == "pluripotent") { feat_color <- genes_pluri }
+  if (subset == "ectoderm") { feat_color <- genes_ecto }
   
-  if(subset == "P1"){ feat_color = genes_p1}
-  if(subset == "P2"){ feat_color = genes_p2}
-  if(subset == "EC1"){ feat_color = genes_ec1}
-  if(subset == "M1"){ feat_color = genes_m1}
-  if(subset == "M2"){ feat_color = genes_m2}
-  if(subset == "EN1"){ feat_color = genes_n1}
-  if(subset == "EN2"){ feat_color = genes_n2}
-  if(subset == "EN3"){ feat_color = genes_n3}
-  
-  sub <- df[df$variable == subset,]
+  # Filter the data for the specific subset
+  sub <- df[df$variable == subset, ]
   # Create a new variable to indicate if a gene is a marker
   sub$Is_Marker <- ifelse(sub$gene %in% feat_color, "Yes", "No")
   
-  # Separate the data
+  # Separate the data into marker and non-marker genes
   sub_no <- sub[sub$Is_Marker == "No", ]
   sub_yes <- sub[sub$Is_Marker == "Yes", ]
+  
   # Plot
   plt <- ggplot(sub, aes(x = flex, y = cosmx)) +
-    # Plot "No" points first
-    ggrastr::rasterise(geom_point(data = sub_no, aes(color = Is_Marker),
-                                  shape = 16, size = 2, alpha = 0.8), dpi = 800) +
-    ggpubr::stat_cor(method = "spearman", label.x.npc = "left", label.y.npc = "top", size = 3) + 
-    # Plot "Yes" points on top
-    geom_point(data = sub_yes, aes(color = Is_Marker), shape = 16, size = 2, alpha = 0.8) +
+    # Plot non-marker genes first
+    ggrastr::rasterise(
+      geom_point(
+        data = sub_no, 
+        aes(color = Is_Marker),
+        shape = 16, 
+        size = 2, 
+        alpha = 0.8
+      ), 
+      dpi = 800
+    ) +
+    # Add correlation coefficient
+    ggpubr::stat_cor(
+      method = "spearman", 
+      label.x.npc = "left", 
+      label.y.npc = "top", 
+      size = 3
+    ) + 
+    # Plot marker genes on top
+    geom_point(
+      data = sub_yes, 
+      aes(color = Is_Marker), 
+      shape = 16, 
+      size = 2, 
+      alpha = 0.8
+    ) +
+    # Add gene labels for marker genes with black text
+    ggrepel::geom_text_repel(
+      data = sub_yes, 
+      aes(label = gene),
+      size = 3, 
+      color = "black",  # Changed from "red" to "black"
+      max.overlaps = Inf
+    ) +
     scale_y_log10() +
     scale_x_log10() +
-    geom_abline(slope = 1, intercept = 0, color = "red4", linetype = "dashed") +
-    labs(title = subset, color = "Is Marker") +
+    geom_abline(
+      slope = 1, 
+      intercept = 0, 
+      color = "red4", 
+      linetype = "dashed"
+    ) +
+    labs(
+      title = subset, 
+      color = "Is Marker",
+      x = "Mean counts/gene - Flex", 
+      y = "Mean counts/gene - CosMx"
+    ) +
     theme_bw() +
     theme(
-      text = element_text(size = 10, color = "black"), 
-      axis.text = element_text(size = 8, color = "black"),
+      text = element_text(size = 14, color = "black"), 
+    #  plot.title = element_text(size = 14, color = "black"),
+      axis.text = element_text(size = 10, color = "black"),
       axis.title = element_text(size = 12, color = "black"),
       panel.grid = element_blank(),
       legend.position = "none"  # Remove legend for combining later
     ) +
-    labs(x = "Mean counts/gene - Flex", y= "Mean counts/gene - CosMx") +
     scale_color_manual(values = c("Yes" = "red", "No" = "grey"))
   
   return(plt)
 }
 
-
+# Combine the plots as before
 gg_corr <- wrap_plots(
-  corr_plot(df,"P1"),
-  corr_plot(df,"P2"),
-  corr_plot(df,"EC1"),
-  corr_plot(df,"EN1"),
-  corr_plot(df,"EN2"),
-  corr_plot(df,"EN3"),
-  ncol = 3) +
+  corr_plot(df, "pluripotent"),
+  corr_plot(df, "amnion-like"),
+  corr_plot(df, "late meso."),
+  corr_plot(df, "endoderm"),
+  corr_plot(df, "ectoderm"),
+  nrow = 1
+) +
   plot_layout(axis_titles = "collect")
 #gg_corr
 
 
-pdf("/Users/emanuelepitino/Desktop/stamp_7b_PSC/gex_corr.pdf", width = 6, height = 4)
+pdf("/Users/emanuelepitino/Desktop/stamp_7b_PSC/gex_corr.pdf", width = 14, height = 3)
 gg_corr
 dev.off()
 
 
-
-# CosMx data
-res_dir <- glue("{proj_dir}/data/{stamp}/{sample}")
-cosmx <- qread(glue("{res_dir}/anno_sce.qs"))
-cosmx$tech <- "cosmx"
-
-sample <- "combined"
-outdir <- glue("{proj_dir}/data/{stamp}/processed/flex/iPSC/{sample}")
-flex <- qread(glue("{outdir}/anno_sce.qs"), nthreads = 8)
-flex$tech <- "flex"
-
-
-cd_f <- as.data.frame(colData(flex))
-cd_c <- as.data.frame(colData(cosmx))
-
-cd_c <- cd_c %>% select(tech,cluster)
-cd_f <- cd_f %>% select(tech,cluster)
-
-cd <- rbind(cd_c,cd_f)
-
-df <- as.data.frame(table(cd$tech,cd$cluster))
-df <- df %>% group_by(Var1) %>% mutate(perc = Freq/sum(Freq)) %>% ungroup()
-
-cnumb <- ggplot(df, aes(x = Var2, y = Freq, fill = Var1)) +
-  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
-  theme_bw() +
-  theme(
-    text = element_text(size = 15, color = "black"),
-    axis.text.x = element_text(size = 12,color = "black"),
-    axis.text.y = element_text(size = 12, color ="black"),
-    axis.title = element_text(size = 18),
-    legend.position = "top") +
-  labs(x = "Cluster", y = "# Cells", fill = "Tech")
-
-pdf("/Users/emanuelepitino/Desktop/stamp_7b_PSC/c_d.pdf", width = 14, height = 6)
-wrap_plots(cnumb,gg_corr, ncol = 2) + plot_layout(widths = c(1,2.5))
-dev.off()
