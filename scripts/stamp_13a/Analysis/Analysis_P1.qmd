@@ -134,9 +134,13 @@ dev.off()
 ## Identify TLR4 population in myeloid compartment and ctrl vs LPS
 ```{r}
 sub <- sce[,sce$experiment %in% c("ctrl","LPS") & sce$lvl0 == "myeloid"]
+sub <- logNormCounts(sub)
 feats <- c("TLR1","TLR2","TLR3","TLR4","TLR5",
            "TLR7","TLR8")
-
+feats <- factor(feats, levels = c("TLR1","TLR7","TLR8","TLR4","TLR2",
+                                  "TLR3","TLR5"))
+sub$lvl1 <- factor(sub$lvl1, levels = c("pDCs","act. DCs","act. mono.",
+                                       "inflamm. mono.","class. mono.","cDCs"))
 tlr4_pos <- plotDots(sub, group = "lvl1", features = feats,
          scale = T, center = T) +
   theme(aspect.ratio = 3/1) +
@@ -168,49 +172,12 @@ tlr4_pos
 dev.off()
 ```
 
-# Check TLR4 expression in CTRL and LPS experiments in act. mono.
+# Activated monocytes
 
-```{r}
-sub <- sce[,sce$experiment %in% c("ctrl","LPS") & sce$lvl1 == "act. mono."]
-feats <- c("TLR1","TLR2","TLR3","TLR4","TLR5",
-           "TLR7","TLR8")
-
-tlr4_act_mono <- plotDots(sub, group = "sample", features = "TLR4",
-         scale = F, center = T) +
-  theme(aspect.ratio = 3/1) +
-  scale_color_gradient2("z-scored\nmean expr.", low = "blue4", mid = "grey90", high = "red4") +
-  scale_size_continuous(
-    limits = c(0, 1),
-    breaks = seq(0, 1, 0.5),
-    range = c(1, 5)  # Increase these numbers to make dots bigger
-  ) +
-  theme_minimal(6) +
-  theme(
-    aspect.ratio = 1.5/1,
-    axis.text.y = element_text(color = "black", size = 8),
-    axis.text.x = element_text(
-      angle = 45,
-      hjust = 1,
-      vjust = 1,
-      color = "black",
-      size = 7
-    ),
-    panel.grid.major = element_line(linewidth = 0.1, color = "lightgrey"),
-    axis.title = element_blank(),
-    legend.key.size = unit(0.5, "lines") 
-  ) +
-  coord_flip()
-
-tlr4_act_mono
-
-#pdf("/Users/emanuelepitino/Desktop/stamp_13a/tlr4_pos.pdf", height = 2) # ctrl and lps only
-#tlr4_pos
-#dev.off()
-```
 
 ```{r}
 sub <- sce[,sce$lvl1 == "act. mono." & sce$experiment != "aCD3aCD28"]
-
+sub <- logNormCounts(sub)
 
 feats <- c(
   # Early Response Genes (4h)
@@ -227,8 +194,19 @@ feats <- c(
   "NFKB1", "RELA", "SOD2", "TNFAIP3"
 )
 
-plotDots(sub, group = "sample", features = intersect(feats, rownames(sce)),
-         scale = F, center = T) +
+mrk <- scran::scoreMarkers(sub, groups = sub$experiment, BPPARAM = bp, full.stats = T)
+feat <- lapply(mrk, function(df) {
+  as.data.frame(df) %>%
+    arrange(desc(mean.logFC.cohen)) %>%
+    head(15) %>%
+    rownames()
+})
+
+scoremarkers_feat <- unique(unlist(feat))
+
+
+plotDots(sub, group = "sample", features = scoremarkers_feat,
+         scale = T, center = T) +
   theme(aspect.ratio = 3/1) +
   scale_color_gradient2("centered\nmean expr.", low = "blue4", mid = "grey90", high = "red4") +
   scale_size_continuous(

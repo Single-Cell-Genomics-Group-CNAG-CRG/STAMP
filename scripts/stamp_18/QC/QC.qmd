@@ -1,0 +1,255 @@
+---
+title: "Quality control - Stamp 18 - High multiplexing"
+subtitle: "Emanuele Pitino"
+date: "`r Sys.Date()`"
+format: 
+  html:
+    theme: superhero
+    smooth-scroll: true
+    code-fold: true
+    self-contained: true
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+editor: source
+editor_options: 
+  chunk_output_type: console
+execute:
+  echo: true
+  fig-width: 16     
+  fig-height: 12 
+---
+
+# Dependencies
+```{r}
+suppressPackageStartupMessages({
+  library(SingleCellExperiment)
+  library(tidyverse)
+  library(dplyr)
+  library(patchwork)
+  library(grid)
+  library(ggpubr)
+  library(here)
+  library(scater)
+  library(scuttle)
+  library(glue)
+  library(scran)
+  library(patchwork)
+  library(qs)
+  library(data.table)
+  library(scales)
+  library(RColorBrewer)
+})
+```
+
+
+# Data loading
+```{r}
+dir <- glue("{here()}/scripts")
+source(glue("{dir}/misc/paths.R"))
+source(glue("{dir}/misc/BIN.R"))
+stamp <- "stamp_18"
+data_dir <- glue("{proj_dir}/data/{stamp}/processed")
+plots_dir <- glue("{plt_dir}/{stamp}")
+
+sce <- qread(glue("{data_dir}/layout_sce.qs"))
+```
+
+## Calculate qc metrics
+```{r}
+sce <- addPerCellQCMetrics(sce)
+sce
+```
+
+### Find outliers
+
+```{r}
+# nCounts outliers
+discard_sum_lower <- isOutlier(sce$sum, 
+                         type = "lower", 
+                         log = TRUE,
+                         nmads = 2.5)
+discard_sum_higher <- isOutlier(sce$sum, 
+                         type = "higher", 
+                         log = TRUE,
+                         nmads = 1.5)
+# nFeatures outliers
+discard_detected_lower <- isOutlier(sce$detected, 
+                         type = "lower", 
+                         log = TRUE,
+                         nmads = 2.5)
+discard_detected_higher <- isOutlier(sce$detected, 
+                         type = "higher", 
+                         log = TRUE,
+                         nmads = 1.5)
+# Cell Area outliers
+discard_area_lower <- isOutlier(sce$cell_area, 
+                         type = "lower", 
+                         log = TRUE,
+                         nmads = 2.5)
+
+discard_area_higher <- isOutlier(sce$cell_area, 
+                         type = "higher", 
+                         log = TRUE,
+                         nmads = 1.5)
+```
+
+```{r}
+extr_thr <- function(df){
+return <- list()
+lower <- round(attr(df, 'thresholds')['lower'],0)
+higher <- round(attr(df, 'thresholds')['higher'],0)
+return(c(lower,higher))
+}
+```
+
+```{r}
+cd <- as.data.frame(colData(sce))
+
+qcmet_hist <- \(var, xmin,xmax){
+
+    if(var == "sum") {xlab = "nCount"; isOut_df_lower = discard_sum_lower; isOut_df_higher = discard_sum_higher}
+    if(var == "detected") {xlab = "nFeature"; isOut_df_lower = discard_detected_lower; isOut_df_higher = discard_detected_higher}
+    if(var == "cell_area") {xlab = "Cell area (um2)"; isOut_df_lower = discard_area_lower; isOut_df_higher = discard_area_higher}
+    median <- round(median(cd[[var]]),0)
+    thr_lwr <- attr(isOut_df_lower,"threshold")["lower"]
+    thr_higher <- attr(isOut_df_higher,"threshold")["higher"]
+
+    p <- ggplot(cd, aes(x = !!sym(var))) +
+        geom_histogram(fill = "lightgrey", color = "black", bins = 30, alpha = 0.5) +
+        theme_bw() +
+        geom_vline(xintercept = median, color = "red", size = 1) +
+        geom_vline(xintercept = thr_lwr, color = "#4D4D4D", linetype = "dashed", size = 0.5) +
+        geom_vline(xintercept = thr_higher, color = "#4D4D4D", linetype = "dashed", size = 0.5) +
+        labs(y = "# cells", x = xlab) +
+        annotate("text", x = Inf, y = Inf, label = median, hjust = 1.1, vjust = 1.1, color = "red", size = 5) +
+        theme(
+            panel.grid = element_blank(), 
+            text = element_text(size = 20, color = "black"),
+            axis.text = element_text(size = 16, color = "black")
+        )
+
+    if(var == "sum" | var == "detected") {
+        p <- p + scale_x_log10() +
+            scale_y_continuous(breaks = c(0,50000,100000), labels = c(0,50000,100000))
+    }
+
+    if(var == "cell_area") {
+        p <- p + scale_x_continuous(limits = c(0,500)) +
+            scale_y_continuous(breaks = c(0,25000,50000), labels = c(0,25000,50000))
+    }
+
+    return(p)
+}
+
+outdir <- glue("{plots_dir}/QC")
+dir.create(outdir,showWarnings = F,recursive = T)
+pdf(glue("{outdir}/qc_hist.pdf"), height = 7, width = 4)
+wrap_plots(
+  qcmet_hist("sum",10,13000),
+  qcmet_hist("detected",10,1000),
+  qcmet_hist("cell_area",0,500),
+  ncol = 1) +
+  plot_layout(axis_titles = "collect")
+dev.off()
+
+```
+
+# Filter
+
+```{r}
+filt <- sce[,sce$sum > as.numeric(attr(discard_sum_lower, "threshold")["lower"]) &
+             sce$sum < as.numeric(attr(discard_sum_higher, "threshold")["higher"]) &
+             sce$detected > as.numeric(attr(discard_detected_lower, "threshold")["lower"]) &
+             sce$detected < as.numeric(attr(discard_detected_higher, "threshold")["higher"]) &
+             sce$cell_area > as.numeric(attr(discard_area_lower, "threshold")["lower"]) &
+              sce$cell_area < as.numeric(attr(discard_area_higher, "threshold")["higher"])]
+```
+
+```{r}
+# Extract colData and compute raw counts per sample
+cd_raw <- as.data.frame(colData(sce))
+tab_raw <- as.data.frame(table(cd_raw$sample))
+colnames(tab_raw) <- c("Var1", "Freq_raw")
+
+# Extract colData from filtered data and compute filtered counts per sample
+cd_filt <- as.data.frame(colData(filt))
+tab_filt <- as.data.frame(table(cd_filt$sample))
+colnames(tab_filt) <- c("Var1", "Freq_filt")
+
+# Merge the raw and filtered counts
+df <- left_join(tab_raw, tab_filt, by = "Var1")
+
+# Calculate the difference and percentages
+df$diff <- df$Freq_raw - df$Freq_filt
+df$pct_removed <- round(df$diff / df$Freq_raw, 2)
+df$pct_kept <- 1 - df$pct_removed
+
+# Reshape the data to long format for plotting
+df_long <- df %>%
+  select(Var1, pct_removed, pct_kept) %>%
+  pivot_longer(cols = c("pct_removed", "pct_kept"), names_to = "Status", values_to = "Percentage")
+
+df_long <- df_long %>%
+  mutate(Var1 = factor(Var1, levels = df_long %>%
+                         filter(Status == "pct_kept") %>%
+                         arrange(desc(Percentage)) %>%
+                         pull(Var1)))
+
+# Ensure the stacking order is correct
+df_long$Status <- factor(df_long$Status, levels = c("pct_removed", "pct_kept"))
+
+# Define custom colors
+fill_colors <- c("pct_kept" = "grey50", "pct_removed" = "red4")
+
+# Create the stacked barplot
+pdf(glue("{outdir}/pct_per_sample.pdf"), height = 8, width = 3)
+ggplot(df_long, aes(x = Var1, y = Percentage, fill = Status)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = fill_colors, labels = c("removed","kept")) +
+  labs(x = "Sample", y = "Percentage", fill = "") +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        aspect.ratio = 2/1,
+        axis.text = element_text(size = 12, color = "black"),
+        axis.title = element_text(size = 18, color = "black"),
+        legend.position = "top") +
+  coord_flip()+
+  guides(fill = guide_legend(reverse = TRUE)) +
+  geom_hline(yintercept = mean(df_long$Percentage[df_long$Status == "pct_kept"]),
+             color = "red", linetype = "dashed", size = 1)
+dev.off()
+```
+
+```{r}
+df$Var1 <- factor(df$Var1, levels = unique(df$Var1[order(df$Freq_filt)]))
+df$Var1 <- factor(df$Var1, levels = levels(df_long$Var1))
+
+pdf(glue("{outdir}/ncells_per_sample.pdf"), height = 8, width = 3)
+ggplot(df, aes( y = Var1, x = Freq_filt)) +
+         geom_col(fill = "grey20") +
+  theme_bw() +
+  theme(panel.grid = element_blank()) +
+  labs(x = "# Cells", y = "Sample") +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        aspect.ratio = 2/1,
+        axis.text = element_text(size = 12, color = "black"),
+        axis.title = element_text(size = 18, color = "black"),
+        plot.subtitle = element_text(hjust = 1)) +
+  scale_x_continuous(breaks = c(0,10000,20000),labels = c(0,10000,20000)) +
+    geom_vline(xintercept = mean(df$Freq_filt),
+             color = "red", linetype = "dashed", size = 1) + 
+  labs(subtitle = glue("N = {sum(df$Freq_filt)}")) 
+  
+dev.off()
+``` 
+
+# Save sce
+```{r}
+outdir <- glue("{proj_dir}/data/{stamp}/processed")
+dir.create(outdir, showWarnings = F, recursive = T)
+qsave(filt, file = glue("{outdir}/qc_sce.qs"), nthreads = 8)
+qsave(df, file = glue("{outdir}/qcmet_df.qs"))
+```

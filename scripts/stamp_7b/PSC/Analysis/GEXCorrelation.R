@@ -22,7 +22,7 @@ flex$tech <- "flex"
 
 
 ##  marker genes
-mrk <- c("GATA3","IGFBP7","KRT80","KRT19","APOA1","VTN",
+mrk <- c("GATA3","IGFBP7","KRT80","KRT19",
          "DLL1","SOX2","BMP4",
          "WNT5A","PDGFRA","KDR","TTN","FOXF1","SNAI1",
          "WNT3","POU5F1","FGF2")
@@ -54,7 +54,7 @@ aggr_norm <- function(mat){
   res <- do.call(cbind, lapply(unique(colnames(mat)), function(col_name) {
     sub <- mat[, colnames(mat) %in% col_name, drop = FALSE]
     agg <- rowSums(sub) / ncol(sub)
-    agg <- rowSums(sub)
+  #  agg <- rowSums(sub)
     agg
   }))
   colnames(res) <- unique(colnames(mat))
@@ -74,23 +74,19 @@ agg_fl <- melt(agg_fl, id.vars = "gene")
 names(agg_fl)[names(agg_fl) == "value"] <- "flex"
 
 
-
 df <- merge(agg_cs, agg_fl, by = c("gene", "variable"), all = TRUE)
 
 
 corr_plot <- function(df, subset) {
   
-  genes_amnion_like <- c("GATA3", "IGFBP7", "KRT80", "KRT19", "APOA1", "VTN")
-  genes_BMP <- c("GATA3", "KRT19", "DLL1", "BMP4")
-  genes_ecto <- c("DLL1", "SOX2")
+  genes_amnion_like <- c("GATA3", "IGFBP7", "KRT80", "KRT19")
+  genes_BMP <- c("GATA3", "DLL1", "BMP4")
+  genes_ecto <- c("NRG1", "SOX2")
   genes_late_meso <- c("BMP4", "WNT5A", "PDGFRA", "KDR", "TTN", "FOXF1", "SNAI1", "WNT3")
-  genes_endo <- c("WNT3", "POU5F1", "FGF2")
   genes_pluri <- c("WNT3", "POU5F1", "FGF2")
-  genes_undiff <- c("WNT3", "POU5F1", "FGF2")
-  
+
   # Select the appropriate marker genes based on the subset
   if (subset == "amnion-like") { feat_color <- genes_amnion_like }
-  if (subset == "endoderm") { feat_color <- genes_endo }
   if (subset == "BMP-induced prog.") { feat_color <- genes_BMP }
   if (subset == "late meso.") { feat_color <- genes_late_meso }
   if (subset == "pluripotent") { feat_color <- genes_pluri }
@@ -174,7 +170,6 @@ gg_corr <- wrap_plots(
   corr_plot(df, "pluripotent"),
   corr_plot(df, "amnion-like"),
   corr_plot(df, "late meso."),
-  corr_plot(df, "endoderm"),
   corr_plot(df, "ectoderm"),
   nrow = 1
 ) +
@@ -182,7 +177,7 @@ gg_corr <- wrap_plots(
 #gg_corr
 
 
-pdf("/Users/emanuelepitino/Desktop/stamp_7b_PSC/gex_corr.pdf", width = 14, height = 3)
+pdf("/Users/emanuelepitino/Desktop/stamp_7b_PSC/gex_corr.pdf", width = 12, height = 3)
 gg_corr
 dev.off()
 
