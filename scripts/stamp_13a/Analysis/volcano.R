@@ -27,24 +27,30 @@ sce <- qread(glue("{res_dir}/anno_sce_P1.qs"), nthreads = 8)
 ####################################################################################
 # 1. Activated monocytes : ctrl vs lps at 4h
 ####################################################################################
-sub <- sce[,sce$lvl1 == "act. mono." & sce$experiment != "aCD3aCD28" & sce$timepoint == "4h"] # sub
+sce$id <- paste0(sce$lvl1,"_",sce$replicate,"_",sce$timepoint,"_",sce$experiment)
 
-sub <- logNormCounts(sub) # lognorm
+agg <- aggregateAcrossCells(sce, ids = sce$id, use.assay.type = "counts", statistics = "sum")
+
+sizeFactors(agg) <- NULL
+
+sub <- agg[,agg$lvl1 == "act. mono." & agg$experiment != "aCD3aCD28" & agg$timepoint == "4h"] # sub
+
 # Create obj
 dds <- DESeqDataSetFromMatrix(countData = counts(sub), # take matrix
                               colData = colData(sub), # take coldata
-                              design= ~ replicate + experiment) # indicate replicates and exp columns
+                              design= ~ experiment) # indicate replicates and exp columns
 
-dds <- DESeq(dds, betaPrior=FALSE)
+dds <- DESeq(dds, BPPARAM = bp)
 resultsNames(dds) # lists the coefficients
 res <- results(dds, name="experiment_LPS_vs_ctrl")
 # Shrink log fold changes association with condition: only when few cells
 #res <- lfcShrink(dds, coef="experiment_LPS_vs_ctrl", type="apeglm")
-EnhancedVolcano(res,
+act_mono_lps_ctrl_4h <- EnhancedVolcano(res,
                 lab = rownames(res),
                 x = 'log2FoldChange',
                 y = 'pvalue',
                 FCcutoff = 0.25,
+                pCutoff = 0.05,
                 title = "LPS vs Ctrl - 4h",
                 subtitle = glue("subset: {unique(sub$lvl1)}"),
             #    selectLab = c('CXCL8','CCL5','INSIG1',
@@ -60,30 +66,66 @@ EnhancedVolcano(res,
                 labSize = 3,
                 xlab = bquote(~Log[2]~ 'fold change'),
                 xlim = c(-1,1),
-                ylim = c(0,25))
+                ylim = c(0,15))
+act_mono_lps_ctrl_4h
+####################################################################################
+# 2. Activated monocytes : 4h vs 24h in LPS
+####################################################################################
+sub <- agg[,agg$lvl1 == "act. mono." & agg$experiment == "LPS"] # sub
 
+table(sub$timepoint,sub$replicate)
+
+# Create obj
+dds <- DESeqDataSetFromMatrix(countData = counts(sub), # take matrix
+                              colData = colData(sub), # take coldata
+                              design= ~ timepoint) # indicate replicates and exp. columns
+
+dds <- DESeq(dds, BPPARAM = bp)
+
+resultsNames(dds) # lists the coefficients
+res <- results(dds, name="timepoint_24h_vs_4h")
+
+act_mono_4h_24h_lps <- EnhancedVolcano(res,
+                lab = rownames(res),
+                x = 'log2FoldChange',
+                y = 'pvalue',
+                pCutoff = 0.05,
+                FCcutoff = 0.25,
+                title = "24h vs 4h - LPS",
+                subtitle = glue("subset: {unique(sub$lvl1)}"),
+                boxedLabels = TRUE,
+                colAlpha = 1,
+                legendPosition = 'right',
+                legendLabSize = 14,
+                legendIconSize = 4.0,
+                drawConnectors = TRUE,
+                widthConnectors = 0.5,
+                colConnectors = 'black',
+                labSize = 3,
+                xlab = bquote(~Log[2]~ 'fold change'),
+                xlim = c(-1,1),
+                ylim = c(0,5))
 ####################################################################################
-# 2. Classical monocytes : ctrl vs lps at 4h
+# 3. Classical monocytes : ctrl vs lps at 4h
 ####################################################################################
-sub <- sce[,sce$lvl1 == "class. mono." & sce$experiment != "aCD3aCD28" & sce$timepoint == "4h"] # sub
-sub <- logNormCounts(sub) # lognorm
+sub <- agg[,agg$lvl1 == "class. mono." & agg$experiment != "aCD3aCD28" & agg$timepoint == "4h"] # sub
 
 table(sub$experiment)
 
 # Create obj
 dds <- DESeqDataSetFromMatrix(countData = counts(sub), # take matrix
                               colData = colData(sub), # take coldata
-                              design= ~ replicate + experiment) # indicate replicates and exp. columns
+                              design= ~ experiment) # indicate replicates and exp. columns
 
-dds <- DESeq(dds, betaPrior=FALSE)
+dds <- DESeq(dds, BPPARAM = bp)
 resultsNames(dds) # lists the coefficients
 res <- results(dds, name="experiment_LPS_vs_ctrl")
-# Shrink log fold changes association with condition: only when few cells
-#res <- lfcShrink(dds, coef="experiment_LPS_vs_ctrl", type="apeglm")
-EnhancedVolcano(res,
+
+class_mono_lps_ctrl_4h <- EnhancedVolcano(res,
                 lab = rownames(res),
                 x = 'log2FoldChange',
                 y = 'pvalue',
+                pCutoff = 0.05,
                 FCcutoff = 0.10,
                 title = "LPS vs Ctrl - 4h",
                 subtitle = glue("subset: {unique(sub$lvl1)}"),
@@ -101,38 +143,33 @@ EnhancedVolcano(res,
                 xlab = bquote(~Log[2]~ 'fold change'),
                 xlim = c(-1,1),
                 ylim = c(0,25))
-
-
+class_mono_lps_ctrl_4h
 ####################################################################################
-# 3. Classical monocytes : 4h vs 24h in LPS
+# 4. Classical monocytes : 4h vs 24h in LPS
 ####################################################################################
-sub <- sce[,sce$lvl1 == "class. mono." & sce$experiment == "LPS"] # sub
-sub <- logNormCounts(sub) # lognorm
+sub <- agg[,agg$lvl1 == "class. mono." & agg$experiment == "LPS"] # sub
 
 table(sub$timepoint,sub$replicate)
 
-#sub <- sub[,sample(colnames(sub),1000)]
 # Create obj
 dds <- DESeqDataSetFromMatrix(countData = counts(sub), # take matrix
                               colData = colData(sub), # take coldata
-                              design= ~ replicate + timepoint) # indicate replicates and exp. columns
+                              design= ~ timepoint) # indicate replicates and exp. columns
 
-dds <- DESeq(dds, betaPrior=FALSE, parallel = TRUE, BPPARAM = bp)
-#dds <- DESeq(dds, betaPrior=FALSE)
+dds <- DESeq(dds, BPPARAM = bp)
 
 resultsNames(dds) # lists the coefficients
 res <- results(dds, name="timepoint_24h_vs_4h")
 # Shrink log fold changes association with condition: only when few cells
 #res <- lfcShrink(dds, coef="timepoint_24h_vs_4h", type="apeglm")
-EnhancedVolcano(res,
+class_mono_4h_24h_lps <- EnhancedVolcano(res,
                 lab = rownames(res),
                 x = 'log2FoldChange',
                 y = 'pvalue',
                 FCcutoff = 0.25,
+                pCutoff = 0.05,
                 title = "24h vs 4h - LPS",
                 subtitle = glue("subset: {unique(sub$lvl1)}"),
-                #    selectLab = c('CXCL8','CCL5','INSIG1',
-                #                   'CCL3/L1/L3','ITGB8','G0S2','INHBA','PTGS2','IL6',"STAT4"),
                 boxedLabels = TRUE,
                 colAlpha = 1,
                 legendPosition = 'right',
@@ -145,46 +182,11 @@ EnhancedVolcano(res,
                 xlab = bquote(~Log[2]~ 'fold change'),
                 xlim = c(-1,1),
                 ylim = c(0,25))
-
+class_mono_4h_24h_lps
 
 ####################################################################################
-# 4. CD8 T effector: 4h vs 24 in aCD3aCD28
-####################################################################################
-sub <- sce[,sce$lvl1 == "CD4 TN" & sce$experiment == "aCD3aCD28"] # sub
-sub <- logNormCounts(sub) # lognorm
-
-table(sub$timepoint,sub$replicate)
-
-#sub <- sub[,sample(colnames(sub),1000)]
-# Create obj
-dds <- DESeqDataSetFromMatrix(countData = counts(sub), # take matrix
-                              colData = colData(sub), # take coldata
-                              design= ~ replicate + timepoint) # indicate replicates and exp. columns
-
-dds <- DESeq(dds, betaPrior=FALSE, parallel = TRUE, BPPARAM = bp)
-
-resultsNames(dds) # lists the coefficients
-res <- results(dds, name="timepoint_24h_vs_4h")
-# Shrink log fold changes association with condition: only when few cells
-#res <- lfcShrink(dds, coef="timepoint_24h_vs_4h", type="apeglm")
-EnhancedVolcano(res,
-                lab = rownames(res),
-                x = 'log2FoldChange',
-                y = 'pvalue',
-                FCcutoff = 0.25,
-                title = "24h vs 4h - aCD3aCD28",
-                subtitle = glue("subset: {unique(sub$lvl1)}"),
-                #    selectLab = c('CXCL8','CCL5','INSIG1',
-                #                   'CCL3/L1/L3','ITGB8','G0S2','INHBA','PTGS2','IL6',"STAT4"),
-                boxedLabels = TRUE,
-                colAlpha = 1,
-                legendPosition = 'right',
-                legendLabSize = 14,
-                legendIconSize = 4.0,
-                drawConnectors = TRUE,
-                widthConnectors = 0.5,
-                colConnectors = 'black',
-                labSize = 3,
-                xlab = bquote(~Log[2]~ 'fold change'),
-                xlim = c(-1,1),
-                ylim = c(0,25))
+pdf("/Users/emanuelepitino/Desktop/stamp_13a/volcanos.pdf", width = 18, height = 15)
+wrap_plots(act_mono_lps_ctrl_4h,act_mono_4h_24h_lps,
+           class_mono_lps_ctrl_4h,class_mono_4h_24h_lps, ncol = 2) + 
+  plot_layout(guides = "collect")
+dev.off()

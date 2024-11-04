@@ -14,7 +14,7 @@ dir <- glue("{here()}/scripts")
 source(glue("{dir}/misc/paths.R"))
 source(glue("{dir}/misc/BIN.R"))
 
-stamp <- "stamp_15"
+stamp <- "stamp_16"
 # # loading
 
 sce <- qread( glue("{proj_dir}/data/{stamp}/raw/raw_proc/raw_sce.qs"), nthreads = 8)
@@ -29,26 +29,26 @@ samples <- list(
   E = c(121:150),
   F = c(151:180),
   
-  G = c(181:210),
-  H = c(211:240),
-  I = c(241:270),
-  J = c(271:300),
-  K = c(301:330),
-  L = c(331:360),
+  G = c(181:205),
+  H = c(206:235),
+  I = c(236:265),
+  J = c(266:290),
+  K = c(291:315),
+  L = c(316:340),
   
-  M = c(361:390),
-  N = c(391:420),
-  O = c(421:450),
-  P = c(451:480),
-  Q = c(481:510),
-  R = c(511:540),
+  M = c(341:370),
+  N = c(371:395),
+  O = c(396:420),
+  P = c(421:450),
+  Q = c(451:475),
+  R = c(476:500),
   
-  S = c(541:570),
-  T = c(571:600),
-  U = c(601:630),
-  V = c(631:660),
-  W = c(661:690),
-  MX1 = c(691:720)
+  S = c(501:525),
+  T = c(526:555),
+  U = c(556:585),
+  V = c(586:615),
+  X = c(616:640),
+  Y = c(641:665)
 )
 
 invisible(lapply(names(samples), function(name) {

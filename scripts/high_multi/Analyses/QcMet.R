@@ -2,6 +2,9 @@
 library(ggplot2)
 library(dplyr)
 library(ggsignif)
+library(glue)
+library(qs)
+library(here)
 
 set.seed(123)
 pal <- Polychrome::createPalette(31, c("#8DD3C7","#BEBADA","#FB8072"))
@@ -12,7 +15,7 @@ names(pal) <- c("A","O","H",
                 "E","L","T",
                 "F","M","U",
                 "G","N","V",
-                "W","X","Y","MX2","Q","R",
+                "W","X","Y","MX1","Q","R",
                 "stamp_15","stamp_16","stamp_17","stamp_18")
 pal[28] <- "#A6CEE3"
 pal[29] <- "#1F78B4" 
@@ -24,15 +27,15 @@ dir <- glue("{here()}")
 source(glue("{dir}/scripts/misc/paths.R"))
 source(glue("{dir}/scripts/misc/BIN.R"))
 
-s17 <- qread(glue("{proj_dir}/data/{stamps[1]}/processed/clust_sce.qs"))
-s18 <- qread(glue("{proj_dir}/data/{stamps[2]}/processed/clust_sce.qs"))
-s15 <- qread(glue("{proj_dir}/data/{stamps[3]}/processed/qc_sce.qs"))
+s17 <- qread(glue("{proj_dir}/data/{stamps[1]}/processed/clust_sce.qs"), nthreads = 8)
+s18 <- qread(glue("{proj_dir}/data/{stamps[2]}/processed/clust_sce.qs"), nthreads = 8)
+s15 <- qread(glue("{proj_dir}/data/{stamps[3]}/processed/qc_sce.qs"), nthreads = 8)
+s16 <- qread(glue("{proj_dir}/data/{stamps[4]}/processed/qc_sce.qs"), nthreads = 8)
 
-s16 <- s15 # mock until s16 is not available
 qcmet_s17 <- qread(glue("{proj_dir}/data/{stamps[1]}/processed/qcmet_df.qs"))
 qcmet_s18 <- qread(glue("{proj_dir}/data/{stamps[2]}/processed/qcmet_df.qs"))
 qcmet_s15 <- qread(glue("{proj_dir}/data/{stamps[3]}/processed/qcmet_df.qs"))
-qcmet_s16 <- qcmet_s15 # mock until s16 is not available
+qcmet_s16 <- qread(glue("{proj_dir}/data/{stamps[4]}/processed/qcmet_df.qs"))
 
 qcmet_s17$stamp <- stamps[1]
 qcmet_s18$stamp <- stamps[2]
@@ -76,18 +79,21 @@ set.seed(124)
     geom_jitter(aes(color = sample), width = 0.25, size = 1, alpha = 0.7) +
     scale_color_manual(values = pal) +
     theme_bw() +
-    labs(x = "Stamp", y = ylab) +
+    labs(x = "Replicate", y = ylab) +
     geom_signif(comparisons = list(c("stamp_17", "stamp_18"), c("stamp_15", "stamp_16")),
                 map_signif_level = TRUE, 
                 test = "wilcox.test") +
     theme(panel.grid = element_blank(),
           text = element_text(size = 15, color = "black"),
           axis.text = element_text(size = 12, color = "black"),
+          axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, color = "black"),
           aspect.ratio = 1.5/1,
           legend.position = "right") +
     guides(color = guide_legend(override.aes = list(size = 4, alpha = 1))) +
-    scale_x_discrete(labels = c("stamp_15" = "C1","stamp_16" = "C2",
-                                "stamp_17" = "X1", "stamp_18" = "X2"))
+    scale_x_discrete(labels = c("stamp_15" = "Stamp-C #15",
+                                "stamp_16" = "Stamp-C #16",
+                                "stamp_17" = "Stamp-X #17",
+                                "stamp_18" = "Stamp-X #18"))
 
 if(var == "mean_sum") {p <- p + 
   scale_y_continuous(transform = "log10",
@@ -110,6 +116,7 @@ qcmet <- wrap_plots(mean_bxp("mean_sum") + theme(legend.position = "none"),
            ncol =3) +
   plot_layout(axis_titles = "collect")
 
+outdir <- glue("{plt_dir}/{stamp}")
 pdf(glue("{outdir}/qcmet.pdf"),width = 10,height = 5)
 qcmet
 dev.off()
@@ -144,10 +151,10 @@ n_c <- ggplot(qcmet_df, aes( y = Var1, x = Freq_filt, fill = stamp)) +
   theme_bw() +
   theme(panel.grid = element_blank()) +
   scale_fill_manual(values = pal, 
-                    labels = c("stamp_15" = "C1",
-                               "stamp_16" = "C2",
-                               "stamp_17" = "X1",
-                               "stamp_18" = "X2")) +
+                    labels = c("stamp_15" = "Stamp-C #15",
+                               "stamp_16" = "Stamp-C #16",
+                               "stamp_17" = "Stamp-X #17",
+                               "stamp_18" = "Stamp-X #18")) +
   labs(x = "# Cells", y = "", fill = "Replicate") +
   theme_bw() +
   theme(panel.grid = element_blank(),

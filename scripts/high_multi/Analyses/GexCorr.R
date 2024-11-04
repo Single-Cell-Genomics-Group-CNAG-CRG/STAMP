@@ -4,8 +4,11 @@ library(dplyr)
 library(ggsignif)
 library(pheatmap)
 library(SingleCellExperiment)
+library(glue)
+library(here)
+library(qs)
 
-stamps <- c("stamp_17","stamp_18")
+stamps <- c("stamp_17","stamp_18","stamp_15","stamp_16")
 dir <- glue("{here()}")
 source(glue("{dir}/scripts/misc/paths.R"))
 source(glue("{dir}/scripts/misc/BIN.R"))
@@ -13,9 +16,9 @@ source(glue("{dir}/scripts/misc/BIN.R"))
 # load data
 s17 <- qread(glue("{proj_dir}/data/{stamps[1]}/processed/clust_sce.qs"))
 s18 <- qread(glue("{proj_dir}/data/{stamps[2]}/processed/clust_sce.qs"))
-s15 <- qread(glue("{proj_dir}/data/{stamps[2]}/processed/PreProcNew.qs"))
+s15 <- qread(glue("{proj_dir}/data/{stamps[3]}/processed/PreProcNew.qs"))
+s16 <- qread(glue("{proj_dir}/data/{stamps[4]}/processed/PreProcNew.qs"))
 
-s16 <- s15 # mock, remove once s16 is ready
 set.seed(123)
 pal <- Polychrome::createPalette(31, c("#8DD3C7","#BEBADA","#FB8072"))
 names(pal) <- c("A","O","H",
@@ -25,12 +28,19 @@ names(pal) <- c("A","O","H",
                 "E","L","T",
                 "F","M","U",
                 "G","N","V",
-                "W","X","Y","MX2","Q","R",
+                "W","X","Y","MX1","Q","R",
                 "stamp_15","stamp_16","stamp_17","stamp_18")
 pal[28] <- "#A6CEE3"
 pal[29] <- "#1F78B4" 
 pal[30] <- "#B2DF8A" 
 pal[31] <- "#33A02C"
+
+ft <- intersect(rownames(s15),rownames(s18))
+s15 <- s15[ft,]
+s16 <- s16[ft,]
+s17 <- s17[ft,]
+s18 <- s18[ft,]
+
 
 # Function to update counts matrix column names based on sample names
 update_counts_colnames <- function(sce) {
@@ -68,6 +78,7 @@ agg_s15 <- as.data.frame(aggr_norm(c15))
 agg_s15$gene <- rownames(agg_s15)
 agg_s16 <- as.data.frame(aggr_norm(c16))
 agg_s16$gene <- rownames(agg_s16)
+
 # rename columns
 colnames(agg_s17)[-which(colnames(agg_s17) == "gene")] <- paste0(colnames(agg_s17)[-which(colnames(agg_s17) == "gene")], "_s17")
 colnames(agg_s18)[-which(colnames(agg_s18) == "gene")] <- paste0(colnames(agg_s18)[-which(colnames(agg_s18) == "gene")], "_s18")
@@ -85,12 +96,13 @@ anno_col <- data.frame(name = colnames(df))
 
 rownames(anno_col) <- anno_col$name
 
+library(tidyr)
 anno_col <- anno_col %>%
   separate(name, into = c("name", "stamp"), sep = "_")
+
 names(anno_col)[names(anno_col) == "name"] <- "Cell line IDs"
 names(anno_col)[names(anno_col) == "stamp"] <- "Replicate"
 anno_col <- anno_col[, c("Replicate", "Cell line IDs")]
-anno_col$Replicate <- factor(anno_col$Replicate, levels = c("s15","s16","s17","s18"))
 # Create the annotation_colors list
 annotation_colors <- list(
   "Replicate" = c("s15" = pal[[28]], "s16" = pal[[29]], "s17" = pal[[30]], "s18" = pal[[31]]),
@@ -113,7 +125,7 @@ hm <- pheatmap(
 stamp <- "high_multi"
 outdir <- glue("{plt_dir}/{stamp}")
 dir.create(outdir,showWarnings = F)
-pdf(glue("{outdir}/hm.pdf"),width = 8,height = 6)
+pdf(glue("{outdir}/big_hm.pdf"),width = 8,height = 6)
 hm
 dev.off()
 

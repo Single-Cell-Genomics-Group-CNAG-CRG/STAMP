@@ -6,17 +6,18 @@ suppressPackageStartupMessages({
   library(glue)
   library(here)
   library(SingleCellExperiment)
+  library(data.table)
 })
 
 dir <- glue("{here()}/scripts")
 # Parameters and paths
 source(glue("{dir}/misc/paths.R"))
 source(glue("{dir}/misc/BIN.R"))
-stamp <- "stamp_15"
+stamp <- "stamp_16"
 
-# # loading
- dir <- glue("{proj_dir}/data/{stamp}/raw/stamp_c_1_15_24s")
- f <- \(.) file.path(dir, paste0("STAMPC_1_15_24s_", .))
+# loading
+ dir <- glue("{proj_dir}/data/{stamp}/raw/STAMPC_2_16_24s")
+ f <- \(.) file.path(dir, paste0("STAMPC_2_16_24s_", .))
 
 y <- readSparseCSV(f("exprMat_file.csv.gz"), transpose=TRUE)
 cd <- fread(f("metadata_file.csv.gz"), nThread = 8)
