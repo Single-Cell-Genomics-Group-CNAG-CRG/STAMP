@@ -71,11 +71,11 @@ ist <- function(sce, nk, gs=TRUE, pbs=NULL, bkg=TRUE) {
   return(clust)
 }
 
-unsup <- ist(sce, 3:10)
+unsup <- ist(sce, 3:6)
 
 ##Save
 dir <- glue("{proj_dir}/data/{stamp}/{sample}/Ist")
 dir.create(dir, showWarnings = F, recursive = T)
-qsave(unsup, file = glue("{dir}/unsup_3_10.qs"))
+qsave(unsup, file = glue("{dir}/unsup_3_6.qs"))
 
 sessionInfo()

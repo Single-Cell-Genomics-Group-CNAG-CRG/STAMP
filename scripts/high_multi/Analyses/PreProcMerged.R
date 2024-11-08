@@ -99,10 +99,37 @@ if(var == "tech") {p <- p + scale_color_manual(values = pal2)}
 return(p)
 }
 
+# Plot unique samples in PCA
+unique <- names(which(tapply(sce$tech, sce$sample, function(x) length(unique(x)) == 1)))
+sce$unique <- ifelse(sce$sample %in% unique,"yes","no")
+
+df <- as.data.frame(colData(sce)) # cd
+pca_df <- reducedDim(sce,"PCA") # pc
+
+df <- cbind(df,pca_df) # merge
+df <- df[sample(nrow(df)), ] # shuffle
+
+df$unique <- factor(df$unique, levels = c("yes","no"))
+pca_unique_samples <- ggplot(df, aes(x = PC1, y = PC2, color = unique)) +
+  ggrastr::rasterise(geom_point(shape = 16, size = 0.01), dpi = 1200) +
+  theme_bw() +
+  scale_color_manual(values = c("yes" = "red4", "no" = "grey80")) +
+  theme(
+    text = element_text(size = 25, color = "black"),
+    axis.text = element_text(size = 20, color = "black"),
+    legend.text = element_text(size = 12),
+    legend.title = element_text(size = 18),
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank()
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 4))) + 
+  coord_equal() +
+  labs(color = "Unique \nacross \nreplicates")
+
 
 pca_plts <- wrap_plots(
-  pca("tech") + theme(axis.title.x = element_blank(), axis.title.y = element_blank()),
-  pca("replicate") + theme(legend.position = "none", axis.title.x = element_blank()),
+  pca("replicate") + theme(legend.position = "none", axis.title = element_blank()),
+  pca_unique_samples + theme(axis.title.x = element_blank(), legend.position = "none"),
   pca("sample") + theme(legend.position = "none", axis.title.y = element_blank()),
   ncol = 1)
 

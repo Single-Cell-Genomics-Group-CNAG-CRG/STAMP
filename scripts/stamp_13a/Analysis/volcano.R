@@ -57,7 +57,7 @@ act_mono_lps_ctrl_4h <- EnhancedVolcano(res,
             #                   'CCL3/L1/L3','ITGB8','G0S2','INHBA','PTGS2','IL6',"STAT4"),
                 boxedLabels = TRUE,
                 colAlpha = 1,
-                legendPosition = 'right',
+                legendPosition = 'none',
                 legendLabSize = 14,
                 legendIconSize = 4.0,
                 drawConnectors = TRUE,
@@ -66,7 +66,7 @@ act_mono_lps_ctrl_4h <- EnhancedVolcano(res,
                 labSize = 3,
                 xlab = bquote(~Log[2]~ 'fold change'),
                 xlim = c(-1,1),
-                ylim = c(0,15))
+                ylim = c(0,15)) 
 act_mono_lps_ctrl_4h
 ####################################################################################
 # 2. Activated monocytes : 4h vs 24h in LPS
@@ -95,7 +95,7 @@ act_mono_4h_24h_lps <- EnhancedVolcano(res,
                 subtitle = glue("subset: {unique(sub$lvl1)}"),
                 boxedLabels = TRUE,
                 colAlpha = 1,
-                legendPosition = 'right',
+                legendPosition = 'none',
                 legendLabSize = 14,
                 legendIconSize = 4.0,
                 drawConnectors = TRUE,
@@ -104,7 +104,7 @@ act_mono_4h_24h_lps <- EnhancedVolcano(res,
                 labSize = 3,
                 xlab = bquote(~Log[2]~ 'fold change'),
                 xlim = c(-1,1),
-                ylim = c(0,5))
+                ylim = c(0,5)) 
 ####################################################################################
 # 3. Classical monocytes : ctrl vs lps at 4h
 ####################################################################################
@@ -142,7 +142,7 @@ class_mono_lps_ctrl_4h <- EnhancedVolcano(res,
                 labSize = 3,
                 xlab = bquote(~Log[2]~ 'fold change'),
                 xlim = c(-1,1),
-                ylim = c(0,25))
+                ylim = c(0,25)) 
 class_mono_lps_ctrl_4h
 ####################################################################################
 # 4. Classical monocytes : 4h vs 24h in LPS
@@ -185,8 +185,8 @@ class_mono_4h_24h_lps <- EnhancedVolcano(res,
 class_mono_4h_24h_lps
 
 ####################################################################################
-pdf("/Users/emanuelepitino/Desktop/stamp_13a/volcanos.pdf", width = 18, height = 15)
-wrap_plots(act_mono_lps_ctrl_4h,act_mono_4h_24h_lps,
-           class_mono_lps_ctrl_4h,class_mono_4h_24h_lps, ncol = 2) + 
+pdf("/Users/emanuelepitino/Desktop/stamp_13a/volcanos.pdf", width = 8, height = 10)
+wrap_plots(act_mono_lps_ctrl_4h,act_mono_4h_24h_lps, ncol = 1) + 
   plot_layout(guides = "collect")
 dev.off()
+

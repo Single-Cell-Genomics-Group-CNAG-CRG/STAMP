@@ -60,8 +60,14 @@ source(glue("{dir}/scripts/misc/BIN.R"))
 ```{r}
 base_dir <- glue("{proj_dir}/data/{stamp}/processed/flex/{sample}")
 
-sce <- qread(glue("{base_dir}//qc_flex_{sample}.qs"), nthreads = 8)
+sce <- qread(glue("{base_dir}/qc_flex_{sample}.qs"), nthreads = 8)
 sce
+```
+
+# Subset for panel intersection of CosMx and Flex
+```{r}
+#panel_int <- qread(glue("{proj_dir}/data/{stamp}/processed/panel_int.qs"))
+#sce <- sce[panel_int,]
 ```
 
 # Processing
@@ -76,7 +82,7 @@ sce <- logNormCounts(sce)
 set.seed(0010101)
 dec.var <- modelGeneVar(sce, BPPARAM = bp) # model gene var
 hvg <- getTopHVGs(dec.var,fdr.threshold = 1) # select hvg on fdr
-hvg <- hvg[1:4000] # take top 4k hvg by fdr
+hvg <- hvg[1:4000]
 metadata(sce)[[glue("hvg_{sample}")]] <- hvg # assign to metadata
 
 dec.var$hvg <- "no" # Assign to dec.var column for plot

@@ -141,7 +141,7 @@ pct_c <- ggplot(qcmet_df, aes(y = Var1, x = pct_kept, fill = stamp)) +
         plot.title = element_text(size = 10,color = "black", hjust = 0),
         legend.position = "none") +
   scale_x_continuous(breaks = c(0.00,0.50,1.00)) +
-  labs(fill = "Replicate", x = "% cells kept", y = "Cell line IDs",
+  labs(fill = "Replicate", x = "Fraction cells kept", y = "Cell line IDs",
        subtitle = round(mean(qcmet_df$pct_kept),2)) 
 pct_c
 ################################################################################

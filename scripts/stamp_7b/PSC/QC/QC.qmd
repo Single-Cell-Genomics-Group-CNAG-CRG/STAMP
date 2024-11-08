@@ -58,6 +58,10 @@ sce <- sce[, sce$sample %in% sample]
 plots_dir <- glue("{plt_dir}/{stamp}/{sub}")
 ```
 
+```{r}
+sce <- sce[,sce$sample != "endoderm"]
+```
+
 # Slide layout
 ```{r fig.width= 10, fig.height= 10}
 sce
@@ -94,6 +98,11 @@ ggplot(cd, aes(x = CenterX_global_px, y = CenterY_global_px, color = sample)) +
 # Add quality metrics
 ```{r}
 sce <- addPerCellQCMetrics(sce)
+```
+
+# take raw metadata
+```{r}
+md_raw <- as.data.frame(colData(sce))
 ```
 
 # Find Outliers
@@ -397,10 +406,27 @@ gg_spat_metrics
 dev.off()
 ```
 
+# take coldata filtered
+```{r}
+md_filt <- as.data.frame(colData(filt))
+```
+
+```{r}
+ncells_raw <- as.data.frame(table(md_raw$sample))
+ncells_filt <- as.data.frame(table(md_filt$sample))
+
+colnames(ncells_raw)[colnames(ncells_raw) == "Freq"] <- "raw"
+colnames(ncells_filt)[colnames(ncells_filt) == "Freq"] <- "filt"
+
+qcmet_df <- merge(ncells_raw,ncells_filt, by = "Var1")
+```
+
 
 ```{r}
 sample <- "iPSCs"
 dir <- glue("{proj_dir}/data/{stamp}/{sub}")
 dir.create(dir, showWarnings = F)
 qsave(filt, glue("{dir}/qc_sce.qs"))
+qsave(qcmet_df,  glue("{dir}/qcmet_df.qs"))
+
 ```

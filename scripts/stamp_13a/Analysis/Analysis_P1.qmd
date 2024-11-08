@@ -152,14 +152,14 @@ tlr4_pos <- plotDots(sub, group = "lvl1", features = feats,
   ) +
   theme_minimal(6) +
   theme(
-    aspect.ratio = 1.5/1,
+    aspect.ratio = 2.5/1,
     axis.text.y = element_text(color = "black", size = 8),
     axis.text.x = element_text(
-      angle = 45,
+      angle = 90,
       hjust = 1,
       vjust = 1,
       color = "black",
-      size = 7
+      size = 6
     ),
     panel.grid.major = element_line(linewidth = 0.1, color = "lightgrey"),
     axis.title = element_blank(),
@@ -167,14 +167,12 @@ tlr4_pos <- plotDots(sub, group = "lvl1", features = feats,
   ) +
   coord_flip()
 
-pdf("/Users/emanuelepitino/Desktop/stamp_13a/tlr4_pos.pdf", height = 2) # ctrl and lps only
+pdf("/Users/emanuelepitino/Desktop/stamp_13a/tlr4_pos.pdf", height = 2.5) # ctrl and lps only
 tlr4_pos
 dev.off()
 ```
 
 # Activated monocytes
-
-
 ```{r}
 sub <- sce[,sce$lvl1 == "act. mono." & sce$experiment != "aCD3aCD28"]
 sub <- logNormCounts(sub)

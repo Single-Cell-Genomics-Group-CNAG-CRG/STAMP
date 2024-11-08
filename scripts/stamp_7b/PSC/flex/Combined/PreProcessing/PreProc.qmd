@@ -108,8 +108,7 @@ Features were selected independently for each library. In this step, we will com
 
 set.seed(0010101)
 dec.var <- modelGeneVar(sce, BPPARAM = bp) 
-hvg <- getTopHVGs(dec.var)
-hvg <- hvg[1:4000]
+hvg <- getTopHVGs(dec.var, fdr.threshold = 1)
 length(hvg)
 dec.var$hvg <- "no" # Assign to dec.var column for plot
 dec.var$hvg[rownames(dec.var) %in% hvg] <- "yes"
@@ -117,11 +116,11 @@ gg_hvg <- plot_hvg(dec.var = dec.var, sub = sample) # plot
 gg_hvg
 ```
 
-## PCA
+## PCA on the whole panel
 
 ```{r}
 set.seed(101001)
-sce <- fixedPCA(sce, subset.row = hvg)
+sce <- fixedPCA(sce, subset.row = NULL)
 
 num_pcs_to_retain <- 10
 percent.var <- attr(reducedDim(sce), "percentVar")
@@ -198,7 +197,7 @@ snn <- buildSNNGraph(sce, type = "jaccard", use.dimred="PCA", BPPARAM = bp)
 
 ## Run louvain 
 ```{r}
-clusters <- igraph::cluster_louvain(snn, resolution = 0.2)
+clusters <- igraph::cluster_louvain(snn, resolution = 0.5)
 ```
 
 ```{r}

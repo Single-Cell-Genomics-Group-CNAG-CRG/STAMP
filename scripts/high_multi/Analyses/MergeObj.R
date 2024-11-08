@@ -74,9 +74,9 @@ gc()
 # Find sample names shared across CosMx and Xenium
 shared <- names(which(tapply(sce$tech, sce$sample, function(x) length(unique(x)) > 1)))
 # subset for those
-sub <- sce[,sce$sample %in% shared]
+#sub <- sce[,sce$sample %in% shared]
 
 # save
 res_dir <- glue("{proj_dir}/data/high_multi/processed")
 dir.create(res_dir,showWarnings = F,recursive = T)
-qsave(sub, file = glue("{res_dir}/merged.qs"), nthreads = 8)
+qsave(sce, file = glue("{res_dir}/merged.qs"), nthreads = 8)

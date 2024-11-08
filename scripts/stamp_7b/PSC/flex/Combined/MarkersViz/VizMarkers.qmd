@@ -118,22 +118,22 @@ dot_endo
 
 ```{r}
 # markers
-pdf("/Users/emanuelepitino/Desktop/tmp_long/stamp_7b_iPSC/flex/dotplot_markers.pdf", width = 20)
+pdf("/Users/emanuelepitino/Desktop/tmp_long/stamp_7b_iPSC/tri-lineage/flex/dotplot_markers.pdf", width = 20)
 dot
 dev.off()
 
 # ecto
-pdf("/Users/emanuelepitino/Desktop/tmp_long/stamp_7b_iPSC/flex/dotplot ectoderm markers.pdf", width = 15)
+pdf("/Users/emanuelepitino/Desktop/tmp_long/stamp_7b_iPSC/tri-lineage/flex/dotplot ectoderm markers.pdf", width = 15)
 dot_ecto
 dev.off()
 
 # meso
-pdf("/Users/emanuelepitino/Desktop/tmp_long/stamp_7b_iPSC/flex/dotplot mesoderm markers.pdf", width = 15)
+pdf("/Users/emanuelepitino/Desktop/tmp_long/stamp_7b_iPSC/tri-lineage/flex/dotplot mesoderm markers.pdf", width = 15)
 dot_meso
 dev.off()
 
 # endo
-pdf("/Users/emanuelepitino/Desktop/tmp_long/stamp_7b_iPSC/flex/dotplot endoderm markers.pdf", width = 15)
+pdf("/Users/emanuelepitino/Desktop/tmp_long/stamp_7b_iPSC/tri-lineage/flex/dotplot endoderm markers.pdf", width = 15)
 dot_endo
 dev.off()
 ```

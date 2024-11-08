@@ -59,7 +59,7 @@ sce
 
 ```{r}
 dir <- glue("{proj_dir}/data/{stamp}/{sample}/Ist")
-unsup <- qread(glue("{dir}/unsup_3_10.qs"))
+unsup <- qread(glue("{dir}/unsup_3_6.qs"))
 ```
 
 
@@ -251,7 +251,7 @@ hm <- ggplot(mtx_melted, aes(Var1, Var2, fill = value)) +
   labs(x = "", y = "")
   hm
 
-pdf("/Users/emanuelepitino/Desktop/tmp_long/stamp_7b_iPSC/cosmx/hm_ist_prof.pdf", width = 15)
+pdf("/Users/emanuelepitino/Desktop/tmp_long/stamp_7b_iPSC/tri-lineage/cosmx/hm_ist_prof.pdf", width = 15)
 hm
 dev.off()
 ```
