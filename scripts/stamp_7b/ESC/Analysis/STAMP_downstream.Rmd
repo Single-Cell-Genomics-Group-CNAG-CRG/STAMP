@@ -1,0 +1,751 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+
+```{r}
+library(qs)
+library(SingleCellExperiment)
+library(tidyverse)
+library(dittoSeq)
+
+library(Seurat)
+library(ggplot2)
+
+library(SeuratDisk)
+library(SeuratData)
+
+library(anndata)
+```
+
+```{r}
+ggplotColours <- function(n = 6, h = c(0, 360) + 15){
+  if ((diff(h) %% 360) < 1) h[2] <- h[2] - 360/n
+  hcl(h = (seq(h[1], h[2], length = n)), c = 100, l = 65)
+}
+```
+
+
+```{r, eval=FALSE}
+sce <- qread('~/Desktop/Github/STAMP_C/clust_sce.qs')
+
+counts <- assay(sce,'counts')
+md <- as.data.frame(colData(sce))
+rm(sce)
+```
+
+
+```{r, eval=FALSE}
+Stamp <- CreateSeuratObject(counts = counts, assay = "RNA", project = "STAMP_C", min.cells = 0, min.features = 0, meta.data = md)
+rm(counts)
+gc()
+```
+
+
+```{r}
+Stamp <- readRDS(file = "./rds_qs/Stamp_preprocessed.rds")
+```
+
+```{r}
+Stamp
+```
+
+```{r}
+VlnPlot(object = Stamp, features = "nCount_RNA",group.by = "sample", pt.size = 0 )
+
+
+```
+
+```{r}
+plot_metrics_cat <- function(data, color_var) {
+  ggplot(data, aes(x = CenterX_global_px, y = CenterY_global_px, color = (.data[[color_var]]))) + 
+  ggrastr::rasterise(geom_point(size = 2, shape = 16), dpi = 300) +
+  theme_bw() + 
+  theme(panel.grid = element_blank(), text = element_text(colour = "black", size = 20), 
+        axis.text = element_text(colour = "black", size = 15)) +
+  labs(x = "x_px", y = "y_px") +
+  coord_equal()
+}
+```
+
+```{r}
+plot_metrics <- function(data, color_var) {
+  ggplot(data, aes(x = CenterX_global_px, y = CenterY_global_px, color = (.data[[color_var]]))) + 
+  scale_color_gradientn(colors  = c("gold","navy")) +
+  ggrastr::rasterise(geom_point(size = 0.1, shape = 16), dpi = 600) +
+  theme_bw() + 
+  theme(panel.grid = element_blank(), text = element_text(colour = "black", size = 20), 
+        axis.text = element_text(colour = "black", size = 15)) +
+  labs(x = "x_px", y = "y_px") +
+  coord_equal()
+}
+```
+
+
+```{r}
+md <- as.data.frame(Stamp@meta.data)
+plot_metrics(md, "nCount_RNA")
+
+```
+
+
+```{r, eval=FALSE}
+Stamp[["RNA"]] <- split(Stamp[["RNA"]], f = Stamp$sample)
+Stamp
+```
+
+
+```{r, eval=FALSE}
+Stamp <- NormalizeData(Stamp)
+Stamp <- FindVariableFeatures(Stamp)
+Stamp <- ScaleData(Stamp)
+Stamp <- RunPCA(Stamp)
+```
+
+```{r, eval=FALSE}
+Stamp <- FindNeighbors(Stamp, dims = 1:30, reduction = "pca")
+Stamp <- FindClusters(Stamp, resolution = 0.3, cluster.name = "unintegrated_clusters")
+```
+
+
+```{r, eval=FALSE}
+Stamp <- RunUMAP(Stamp, dims = 1:30, reduction = "pca", reduction.name = "umap.unintegrated")
+# visualize by batch and cell type annotation
+DimPlot(Stamp, reduction = "umap.unintegrated", group.by = c("sample", "unintegrated_clusters"))
+```
+```{r, eval=FALSE}
+FeaturePlot(object = Stamp, features = "nCount_RNA")
+```
+
+```{r, eval=FALSE}
+saveRDS(object = Stamp, file = "Stamp_preprocessed.rds")
+```
+
+
+
+```{r}
+source(file = "../ESC_cEBPa_GRAF/utils/downsample_cells.R")
+stamp_subset <- downsample_cells(seurat = Stamp, var = "sample", n_cells = 60000)
+```
+
+
+```{r, eval=FALSE}
+DimPlot(stamp_subset, reduction = "umap.unintegrated", group.by = c("sample", "unintegrated_clusters"))
+
+```
+
+```{r}
+FeaturePlot(object = stamp_subset, features = "nCount_RNA")
+```
+```{r}
+VlnPlot(object = stamp_subset, features = "nCount_RNA", pt.size = 0)
+
+```
+
+```{r}
+DimPlot(stamp_subset, reduction = "umap.unintegrated", group.by = c( "unintegrated_clusters"), label = T)
+
+```
+
+```{r}
+dittoSeq::dittoBarPlot(object = stamp_subset, var = "sample", group.by = "unintegrated_clusters")
+
+```
+
+```{r, eval=FALSE}
+stamp_subset_samples <- SplitObject(object = stamp_subset, split.by = "sample")
+rm(Stamp)
+gc()
+```
+
+
+```{r}
+samples <- c("iESC_0h", "iESC_6h","iESC_12h", "iESC_24h",
+             "iESC_48h", "iESC_72h", "iESC_96h", "iESC_120h")
+```
+
+
+```{r}
+stamp_subset_samples <- readRDS(file = "./rds_qs/stamp_subset_samples.rds")
+
+```
+
+
+
+```{r, fig.width=9, fig.height=9}
+plot_list <- list()
+
+for (i in samples) {
+  p <- FeatureScatter(object = stamp_subset_samples[[i]], feature1 = "nCount_RNA",feature2 =  "nFeature_RNA", shuffle = T )+ 
+    geom_vline( xintercept=c(1500, 6000)) + geom_hline(yintercept = c(300, 600)) + NoLegend()
+  plot_list[[i]] <- p 
+  
+}
+
+library(gridExtra)
+n <- length(plot_list)
+nCol <- floor(sqrt(n))
+do.call("grid.arrange", c(plot_list, ncol=3))
+
+```
+
+
+
+```{r, eval=FALSE}
+
+for (i in samples) {
+  stamp_subset_samples[[i]] <- subset(stamp_subset_samples[[i]], 
+                                      subset = nFeature_RNA > 300 & nFeature_RNA < 600 & nCount_RNA > 1500 & nCount_RNA < 6000)
+  stamp_subset_samples[[i]] <- NormalizeData(stamp_subset_samples[[i]])
+  stamp_subset_samples[[i]] <- FindVariableFeatures(stamp_subset_samples[[i]])
+  stamp_subset_samples[[i]] <- ScaleData(stamp_subset_samples[[i]])
+  stamp_subset_samples[[i]] <- RunPCA(stamp_subset_samples[[i]])
+  stamp_subset_samples[[i]] <- FindNeighbors(stamp_subset_samples[[i]], dims = 1:30, reduction = "pca")
+  stamp_subset_samples[[i]] <- FindClusters(stamp_subset_samples[[i]], resolution = 0.2)
+  stamp_subset_samples[[i]] <- RunUMAP(stamp_subset_samples[[i]], dims = 1:30, reduction = "pca")
+}
+
+```
+
+
+
+
+```{r, fig.width=9, fig.height=6}
+plot_list_2 <- list()
+
+for (i in samples) {
+  p <- DimPlot(stamp_subset_samples[[i]], reduction = "umap", label = T) + NoAxes() + NoLegend() + ggtitle(i)
+  plot_list_2[[i]] <- p 
+  
+}
+
+library(gridExtra)
+n <- length(plot_list)
+nCol <- floor(sqrt(n))
+do.call("grid.arrange", c(plot_list_2, nrow=2))
+
+```
+
+
+
+```{r, fig.width=9, fig.height=6}
+plot_list_3 <- list()
+
+for (i in samples) {
+  p <- plot_metrics_cat(stamp_subset_samples[[i]]@meta.data, color_var = "seurat_clusters") + NoAxes() + NoLegend() + ggtitle(i)
+  plot_list_3[[i]] <- p 
+  
+}
+
+library(gridExtra)
+n <- length(plot_list)
+nCol <- floor(sqrt(n))
+do.call("grid.arrange", c(plot_list_3, nrow=2))
+
+```
+
+```{r, fig.height=12, fig.width=8}
+plot_list_4 <- list()
+
+for (i in samples) {
+  nc <- length(levels(stamp_subset_samples[[i]]@meta.data$seurat_clusters))
+  p <- dittoBarPlot(object = stamp_subset_samples[[i]], color.panel = ggplotColours(n = nc), 
+                    var = "RNA_snn_res.0.1", group.by = "fov", retain.factor.levels = T ) + NoLegend() + ggtitle(i)
+  plot_list_4[[i]] <- p 
+  
+}
+
+do.call("grid.arrange", c(plot_list_4, ncol=2))
+
+
+```
+
+
+```{r, fig.height=12, fig.width=8}
+plot_list_5 <- list()
+
+for (i in samples) {
+  nc <- length(levels(stamp_subset_samples[[i]]@meta.data$seurat_clusters))
+  p <- dittoBarPlot(object = stamp_subset_samples[[i]], 
+                    group.by = "RNA_snn_res.0.1", var = "fov", retain.factor.levels = T ) + NoLegend() + ggtitle(i)
+  plot_list_5[[i]] <- p
+}
+
+do.call("grid.arrange", c(plot_list_5, ncol=2))
+
+
+```
+
+
+## Exclude clusters only found in some fovs
+
+```{r}
+stamp_subset_samples_fovs <- readRDS(file = "./rds_qs/stamp_subset_samples_fovs.rds")
+
+```
+
+
+
+
+```{r, eval=FALSE}
+stamp_subset_samples_fovs <- stamp_subset_samples
+
+for (i in samples) {
+  Idents(stamp_subset_samples_fovs[[i]]) <- "RNA_snn_res.0.1"
+}
+
+stamp_subset_samples_fovs[["iESC_0h"]]  <- subset(stamp_subset_samples_fovs[["iESC_0h"]],idents = c("0") )
+stamp_subset_samples_fovs[["iESC_6h"]]  <- subset(stamp_subset_samples_fovs[["iESC_6h"]],idents = c("0") )
+stamp_subset_samples_fovs[["iESC_12h"]] <- subset(stamp_subset_samples_fovs[["iESC_12h"]],idents = c("0") )
+stamp_subset_samples_fovs[["iESC_24h"]] <- subset(stamp_subset_samples_fovs[["iESC_24h"]],idents = c("0") )
+stamp_subset_samples_fovs[["iESC_48h"]] <- subset(stamp_subset_samples_fovs[["iESC_48h"]],idents = c("0", "1", "2", "3") )
+stamp_subset_samples_fovs[["iESC_72h"]] <- subset(stamp_subset_samples_fovs[["iESC_72h"]],idents = c("0", "1", "2", "3", "4") )
+stamp_subset_samples_fovs[["iESC_96h"]] <- subset(stamp_subset_samples_fovs[["iESC_96h"]],idents = c("0", "1", "2", "3") )
+stamp_subset_samples_fovs[["iESC_120h"]]<- subset(stamp_subset_samples_fovs[["iESC_120h"]],idents = c("0", "1") )
+
+```
+
+
+```{r}
+rm(Stamp, stamp_subset, stamp_subset_samples)
+gc()
+```
+
+```{r, fig.width=9, fig.height=6}
+plot_list_6 <- list()
+
+for (i in samples) {
+  p <- plot_metrics_cat(stamp_subset_samples_fovs[[i]]@meta.data, color_var = "RNA_snn_res.0.1") + NoAxes() + NoLegend() + ggtitle(i)
+  plot_list_6[[i]] <- p 
+  
+}
+
+do.call("grid.arrange", c(plot_list_6, nrow=2))
+
+```
+
+## Exclude fovs with a few cells (less than 0.1 quantile)
+
+```{r, eval=FALSE}
+
+for (i in samples) {
+  fov_data <- stamp_subset_samples_fovs[[i]]@meta.data$fov
+  x <- quantile(table(fov_data), 0.1)
+  pass <- names(table(fov_data)[table(fov_data) > x])
+  coi <- colnames(stamp_subset_samples_fovs[[i]])[fov_data %in% pass]
+  stamp_subset_samples_fovs[[i]] <- subset(stamp_subset_samples_fovs[[i]], cells = coi )
+  }
+```
+
+```{r, fig.width=9, fig.height=6}
+plot_list_6a <- list()
+
+for (i in samples) {
+  p <- plot_metrics_cat(stamp_subset_samples_fovs[[i]]@meta.data, color_var = "RNA_snn_res.0.1") + NoAxes() + NoLegend() + ggtitle(i)
+  plot_list_6a[[i]] <- p 
+  
+}
+
+do.call("grid.arrange", c(plot_list_6a, nrow=2))
+
+```
+
+
+
+```{r, eval=FALSE}
+saveRDS(object = stamp_subset_samples_fovs, file = "stamp_subset_samples_fovs.rds")
+```
+
+
+
+
+
+```{r, eval=FALSE}
+Epi <- c("SOX2","POU5F1","NANOG","DPPA2","DPPA4","OTX2","MYC","NANOGP8","FGF2")
+NeuroEct <- c("LHX5", "NEUROD1", "PAX6", "SOX1", "NEUROG1","ASCL1","SOX2")
+BMP4_early <- c("GATA3","GATA2","MSX2","HES1","HEY1","ID1","ID2","ID4")
+MesEndod <- c("EOMES","TBXT","MIXL1","GSC","KDR","CDH2","WNT3A","FGF4","NODAL")
+Meso_early <- c("TBXT","SNAI2","GATA6","PDGFRA","GATA4","FGF17")
+Paraxial <- c("TBX6","MSGN1","CDX2","RSPO3","EVX1","DLL3","DLL1","DUSP6","GATA4","MESP2","IRX3","LHX1")
+Somitic <- c("MESP2","RIPPLY2","HEYL","HOPX","PARAXIS","MEOX1","SHISA2","CPM","PAX1","PAX9","NKX3-2","FOXC2","SOX9","TWIST1")
+lateral_Meso <- c("NKX2-5","FOXC1","PRRX1","HOXB5","ISL1","HAND1","FOXF1","GATA4","SNAI1","HOPX","HOXC8","FOXF1") 
+#Cardiac_Meso <- c("NKX2-5","TBX20","GARP","LRRC32")
+Endoderm <- c("FOXA2","SOX17","FOXA1","GATA6","GATA4","CXCR4","TRIM17","APOA1","RIPPLY3","CER1")
+PGCLCs <- c("SOX17","TFAP2C","PRDM1","NANOG","NANOS3","NANOGP8")
+Amnion <- c("GATA3","WNT6","ISL1","HAND1","TGFBI","ACTC1","GATA2","KRT8","KRT18","TFAP2A","TFAP2C")
+
+allmarkers <-  c("SOX2","POU5F1","NANOG","DPPA2","DPPA4","OTX2","MYC","NANOGP8","FGF2",
+                 "LHX5", "NEUROD1", "PAX6", "SOX1", "NEUROG1","ASCL1","SOX2",
+                 "GATA3","GATA2","MSX2","HES1","HEY1","ID1","ID2","ID4",
+                 "EOMES","TBXT","MIXL1","GSC","KDR","CDH2","WNT3A","FGF4","NODAL",
+                 "TBXT","SNAI2","GATA6","PDGFRA","GATA4","FGF17",
+                 "TBX6","MSGN1","CDX2","RSPO3","EVX1","DLL3","DLL1","DUSP6","GATA4","MESP2","IRX3","LHX1",
+                 "MESP2","RIPPLY2","HEYL","HOPX","PARAXIS","MEOX1","SHISA2","CPM","PAX1","PAX9","NKX3-2","FOXC2","SOX9","TWIST1",
+                 "NKX2-5","FOXC1","PRRX1","HOXB5","ISL1","HAND1","FOXF1","GATA4","SNAI1","HOPX","HOXC8","FOXF1",
+                 "FOXA2","SOX17","FOXA1","GATA6","GATA4","CXCR4","TRIM17","APOA1","RIPPLY3","CER1",
+                 "SOX17","TFAP2C","PRDM1","NANOG","NANOS3","NANOGP8",
+                 "GATA3","WNT6","ISL1","HAND1","TGFBI","ACTC1","GATA2","KRT8","KRT18","TFAP2A","TFAP2C")
+```
+
+
+```{r}
+allmarkers <- c("SOX2", "POU5F1", "NANOG",  "MYC", "FGF2", # Epi
+                "GATA3", "HEY1", # BMP4_early
+                "EOMES", "KDR",  # MesEndod
+                "SNAI2", "PDGFRA", # Meso_early
+                "RSPO3", "DLL1", "DUSP6", # Paraxial 
+                "SOX9", "TWIST1",  # Somitic
+                "FOXF1", "SNAI1", # lateral_Meso
+                "CXCR4", "APOA1", # Endoderm
+                "TGFBI", "KRT8", "KRT18" # Amnion
+                )
+
+```
+
+```{r}
+plot_list_7 <- list()
+
+for (i in samples) {
+  p <-DoHeatmap(object = stamp_subset_samples_fovs[[i]], group.by = "RNA_snn_res.0.1", features = allmarkers ) + NoLegend() + ggtitle(i)
+  plot_list_7[[i]] <- p 
+  
+}
+
+do.call("grid.arrange", c(plot_list_7, nrow=2))
+
+```
+
+
+# Save for Harmony + Palantir
+
+```{r,eval=FALSE}
+
+seurat_object <- merge(x = stamp_subset_samples_fovs[[4]],
+                       y = c(stamp_subset_samples_fovs[[3]],
+                             stamp_subset_samples_fovs[[6]], stamp_subset_samples_fovs[[5]],
+                             stamp_subset_samples_fovs[[2]], stamp_subset_samples_fovs[[1]],
+                             stamp_subset_samples_fovs[[7]], stamp_subset_samples_fovs[[8]]),
+                       merge.data = T, merge.dr = "umap.unintegrated", project = "merged")
+
+seurat_object <- JoinLayers(object = seurat_object)
+```
+
+
+```{r,eval=FALSE}
+# 
+# ## --------------------
+# count_matrix <- seurat_object@assays$RNA@layers$counts
+# stamp_scratch <- CreateSeuratObject(counts = count_matrix, project = "stamp_subset_samples_fovs", assay = "RNA",
+#                                    meta.data = seurat_object@meta.data[, c(1:8,31,59:76 )])
+# stamp_scratch@reductions$umap.unintegrated <- seurat_object@reductions$umap.unintegrated
+# Idents(stamp_scratch) <- stamp_scratch@meta.data$sample
+# rm(seurat_object)
+# 
+# # then we save it as a Seurat h5 object
+# 
+# #intermediate_h5_file=paste(input_file,".h5Seurat",sep="")
+# intermediate_h5_file="stamp_subset_sorted.h5Seurat"
+# SaveH5Seurat(seurat_object, filename = intermediate_h5_file, overwrite = T)
+# #rm(GRAF_subset)
+# Convert(intermediate_h5_file, dest = "h5ad")
+
+```
+
+
+
+## convert to anndata
+
+```{r, eval=FALSE}
+X <- as.matrix(t(seurat_object@assays$RNA$counts))
+
+ad <- AnnData(
+  X = as.matrix(t(seurat_object@assays$RNA$counts)),
+  obs = as.data.frame(seurat_object@meta.data[,c(1:8,31,59:76 )]),
+  var = data.frame(gene_ID = colnames(X),# row.names = as.character(1:length(colnames(X))) )
+                   colnames(X) )
+  )
+
+write_h5ad(anndata = ad,filename = "stamp_subset_sorted_2.h5ad")
+
+```
+## Import Palantir results
+
+```{r}
+seurat_object <- readRDS(file = "./rds_qs/stamp_palantir_subset.rds")
+
+```
+
+
+
+```{r, eval=TRUE}
+dfl <- read.csv(file = "./csv/dfl_palantir_coords_oct24.csv", row.names = 1)
+head(dfl)
+
+colnames(dfl) <- c("dfl_1", "dfl_2")
+
+# create dim red
+seurat_object[["dfl"]] = CreateDimReducObject(embeddings = as.matrix(dfl), key = "dfl_")
+DimPlot(seurat_object, reduction = "dfl")
+
+# import palantir clusters
+
+metadata2 <-  read.csv(file = "./csv/dfl_palantir_metadata_oct24.csv", row.names = 1)
+seurat_object@meta.data$palantir_clusters <- metadata2$palantir_clusters
+
+DimPlot(seurat_object, reduction = "dfl", group.by = "palantir_clusters") + NoAxes()
+
+
+```
+
+
+
+## Modify the timepoints
+
+```{r}
+
+seurat_object@meta.data$sample_corrected <- seurat_object@meta.data$sample
+
+seurat_object@meta.data$sample_corrected[seurat_object@meta.data$sample == "iESC_0h" ] <- "iESC_24h"
+seurat_object@meta.data$sample_corrected[seurat_object@meta.data$sample == "iESC_6h" ] <- "iESC_12h"
+seurat_object@meta.data$sample_corrected[seurat_object@meta.data$sample =="iESC_12h" ] <- "iESC_6h"
+seurat_object@meta.data$sample_corrected[seurat_object@meta.data$sample =="iESC_24h" ] <- "iESC_0h"
+seurat_object@meta.data$sample_corrected[seurat_object@meta.data$sample =="iESC_48h" ] <- "iESC_120h"
+seurat_object@meta.data$sample_corrected[seurat_object@meta.data$sample =="iESC_72h" ] <- "iESC_96h"
+seurat_object@meta.data$sample_corrected[seurat_object@meta.data$sample =="iESC_96h" ] <- "iESC_72h"
+seurat_object@meta.data$sample_corrected[seurat_object@meta.data$sample =="iESC_120h"] <- "iESC_48h"
+
+
+seurat_object@meta.data$sample_corrected <- factor(seurat_object@meta.data$sample_corrected, levels = samples, ordered = T)
+```
+
+```{r}
+dittoBarPlot(object = seurat_object, var = "palantir_clusters", group.by = "sample_corrected", retain.factor.levels = T)
+
+```
+
+
+
+```{r}
+
+samples_plot <- list()
+
+for ( i in samples)
+{
+ p <-  DimPlot(object = seurat_object, reduction = "dfl", pt.size = 0.1,alpha = 0.1,
+          cells.highlight = colnames(seurat_object)[seurat_object@meta.data$sample_corrected == i]  ) + NoAxes() + NoLegend() + ggtitle(i)
+    samples_plot[[i]] <- p 
+  
+}
+
+do.call("grid.arrange", c(samples_plot, nrow=2))
+
+
+```
+
+```{r}
+library(RColorBrewer)
+allmarkers_2 <- c("SOX2",   "POU5F1", "NANOG",
+                  "GATA3",  "HEY1",   "EOMES",  "KDR", "SNAI2",  "PDGFRA",
+                  "DUSP6",  "FOXF1", "SNAI1", 
+                  "CXCR4",  "APOA1",  "TGFBI" )
+
+DotPlot(object = seurat_object, features = allmarkers_2, group.by = "palantir_clusters")+
+  RotatedAxis() + scale_colour_gradient2(brewer.pal(n = 9, name = "RdBu"))
+```
+
+
+
+```{r}
+
+current.cluster.ids <- as.character(0:15)
+
+new.cluster.ids     <- c("Pluripotent","Pluripotent","Pluripotent-2",
+                         "Amnion",
+                         "Paraxial/Lateral",
+                         "MesEndo", "MesEndo",
+                         "Paraxial/Lateral",
+                         "Amnion-precursors",
+                         "Endoderm", #9 
+                         "Early_Mesoderm",
+                         "Amnion-precursors",
+                         "NANOG+_CXCR4+",
+                         "Early_Mesoderm",
+                         "Paraxial/Lateral",
+                         "Endoderm"
+                         )
+  
+
+seurat_object@meta.data$Anno_011024 <- plyr::mapvalues(x=seurat_object@meta.data$palantir_clusters,
+                                                             from = current.cluster.ids,
+                                                             to = new.cluster.ids)
+
+
+seurat_object@meta.data$Anno_011024 <- factor(x = seurat_object@meta.data$Anno_011024, 
+                                              levels = c("Pluripotent","Pluripotent-2",
+                                                         "MesEndo", "Early_Mesoderm",
+                                                         "Paraxial/Lateral", "NANOG+_CXCR4+", 
+                                                         "Endoderm",
+                                                        "Amnion-precursors", "Amnion"),
+                                              ordered = T)
+
+
+seurat_object <- SetIdent(object = seurat_object, value = "Anno_011024")
+```
+
+
+```{r}
+
+p2 <- do.call("grid.arrange", c(samples_plot, nrow=2))
+
+```
+
+```{r}
+
+p1 <- DimPlot(seurat_object, reduction = "dfl", alpha = 0.5, pt.size = 0.5) + NoAxes() + NoLegend()
+p1
+ggsave(filename = "dfl_high_res.jpeg", device = jpeg,dpi = 300, width = 12, height = 6 )
+
+```
+
+
+```{r}
+library(RColorBrewer)
+allmarkers_2 <- c("SOX2",   "POU5F1", "NANOG",# "WNT5B",
+                  #"GATA3",  "HEY1",  
+                  "EOMES",  "KDR", "SNAI2",  "PDGFRA",
+                  "DUSP6",  "FOXF1", "SNAI1", 
+                  "CXCR4",  "APOA1",
+                  "GATA3","TGFBI" )
+
+p2 <- DotPlot(object = seurat_object, features = allmarkers_2) + RotatedAxis() + scale_colour_gradient2(rev(brewer.pal(n = 9, name = "RdBu")))
+p2
+ggsave(plot = p2 , filename = "dotplot_res.jpeg", device = jpeg,dpi = 300, width = 12, height = 6 )
+
+```
+
+```{r}
+
+seurat_object$sample <- factor(x = seurat_object$sample, levels =samples, ordered = T)
+
+dittoBarPlot(object = seurat_object, var = "Anno_011024", group.by = "sample_corrected",
+             retain.factor.levels = T, color.panel = ggplotColours(n = 9) )
+
+
+```
+
+```{r, eval=FALSE}
+write_rds(x = seurat_object, file = "./stamp_palantir_subset.rds")
+```
+
+
+## Rename cluster Pluripotent to BMP-early
+
+```{r}
+
+current.cluster.ids <- as.character(0:15)
+
+new.cluster.ids     <- c("Pluripotent",
+                         "BMP-induced Prog","BMP-induced Prog",
+                         "Amnion",
+                         "Late Mesoderm",
+                         "Mesendoderm", "Mesendoderm",
+                         "Late Mesoderm",
+                         "Amnion-precursors",
+                         "Endoderm", #9 
+                         "Early Mesoderm",
+                         "Amnion-precursors",
+                         "PGLCs",
+                         "Early Mesoderm",
+                         "Late Mesoderm",
+                         "Endoderm"
+                         )
+  
+
+seurat_object@meta.data$Anno_221024 <- plyr::mapvalues(x=seurat_object@meta.data$palantir_clusters,
+                                                             from = current.cluster.ids,
+                                                             to = new.cluster.ids)
+
+
+seurat_object@meta.data$Anno_221024 <- factor(x = seurat_object@meta.data$Anno_221024, 
+                                              levels = c("Pluripotent","BMP-induced Prog",
+                                                         "Mesendoderm", "Early Mesoderm",
+                                                         "Late Mesoderm", "PGLCs", 
+                                                         "Endoderm",
+                                                        "Amnion-precursors", "Amnion"),
+                                              ordered = T)
+
+
+seurat_object <- SetIdent(object = seurat_object, value = "Anno_221024")
+```
+
+
+```{r}
+
+p2 <- do.call("grid.arrange", c(samples_plot, nrow=2))
+
+```
+
+```{r}
+
+p1 <- DimPlot(seurat_object, reduction = "dfl", alpha = 0.5, pt.size = 0.5) + NoAxes() + NoLegend()
+p1
+ggsave(filename = "./plots/dfl_high_res_221024.jpeg", device = jpeg,dpi = 300, width = 12, height = 6 )
+
+```
+
+
+```{r}
+library(RColorBrewer)
+allmarkers_2 <- c("SOX2",   "POU5F1", "NANOG",# "WNT5B",
+                  #"GATA3",  "HEY1",  
+                  "HEY1", "BMP4",
+                  "EOMES",  "KDR", "SNAI2",  "PDGFRA",
+                  "DUSP6",  "FOXF1", "SNAI1", 
+                  "CXCR4",  "APOA1",
+                  "GATA3","TGFBI" )
+
+p2 <- DotPlot(object = seurat_object, features = allmarkers_2) + RotatedAxis() + scale_colour_gradient2(rev(brewer.pal(n = 9, name = "RdBu")))
+p2
+#ggsave(plot = p2 , filename = "dotplot_res.jpeg", device = jpeg,dpi = 300, width = 12, height = 6 )
+
+```
+```{r}
+BMP_markers <- FindMarkers(object = seurat_object, ident.1 = "BMP-induced Prog", ident.2 = "Pluripotent",min.diff.pct = 0.2,  only.pos = T)
+BMP_markers <- BMP_markers[BMP_markers$p_val_adj < 0.01, ]
+
+```
+
+
+
+```{r}
+allmarkers_2 <- c("SOX2",   "NANOG", "POU5F1",# "WNT5B"
+                  #"MSX2", "HES1",
+                  "BMP7", "GATA3",#  "HEY1",  
+                  "EOMES", "KDR",  "SNAI2",  "PDGFRA",
+                  "FOXF1", "SNAI1", 
+                  "CXCR4",  "APOA1",
+                  "KRT7",
+                  "TGFBI" )
+  
+p2 <- DotPlot(object = seurat_object, features = allmarkers_2, scale = T, cols = "RdBu", col.max = 2)  + RotatedAxis()
+p2
+ggsave(plot = p2 , filename = "./plots/flex_dotplot_res_221024.jpeg", device = jpeg,dpi = 300, width = 12, height = 6 )
+```
+
+
+
+```{r}
+
+seurat_object$sample <- factor(x = seurat_object$sample, levels =samples, ordered = T)
+
+dittoBarPlot(object = seurat_object, var = "Anno_221024", group.by = "sample_corrected",
+             retain.factor.levels = T, color.panel = ggplotColours(n = 9) )
+
+
+```
+
+```{r, eval=FALSE}
+write_rds(x = seurat_object, file = "./stamp_palantir_subset.rds")
+```

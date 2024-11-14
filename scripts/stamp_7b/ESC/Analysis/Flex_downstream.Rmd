@@ -1,0 +1,564 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+
+```{r}
+library(qs)
+library(SingleCellExperiment)
+library(tidyverse)
+library(dittoSeq)
+
+library(Seurat)
+library(ggplot2)
+
+library(SeuratDisk)
+library(SeuratData)
+
+library(anndata)
+library(gridExtra)
+
+```
+
+
+```{r}
+ggplotColours <- function(n = 6, h = c(0, 360) + 15){
+  if ((diff(h) %% 360) < 1) h[2] <- h[2] - 360/n
+  hcl(h = (seq(h[1], h[2], length = n)), c = 100, l = 65)
+}
+```
+
+```{r, eval=FALSE}
+Flex <- readRDS(file = "./rds_qs/seurat_flex_iESCs.RDS")
+Flex
+```
+
+```{r, eval=FALSE}
+VlnPlot(object = Flex, features = "nCount_RNA",group.by = "sample", pt.size = 0 )
+
+```
+
+
+```{r, eval=FALSE}
+Flex[["RNA"]] <- split(Flex[["RNA"]], f = Flex$sample)
+Flex
+```
+
+
+```{r, eval=FALSE}
+Flex <- NormalizeData(Flex)
+Flex <- FindVariableFeatures(Flex)
+Flex <- ScaleData(Flex)
+Flex <- RunPCA(Flex)
+```
+
+```{r, eval=FALSE}
+Flex <- FindNeighbors(Flex, dims = 1:30, reduction = "pca")
+Flex <- FindClusters(Flex, resolution = 0.3, cluster.name = "unintegrated_clusters")
+```
+
+
+```{r, eval=FALSE}
+Flex <- RunUMAP(Flex, dims = 1:30, reduction = "pca", reduction.name = "umap.unintegrated")
+# visualize by batch and cell type annotation
+DimPlot(Flex, reduction = "umap.unintegrated",
+        group.by = c("sample", "unintegrated_clusters"), label = T)
+```
+```{r, eval=FALSE}
+FeaturePlot(object = Flex, features = "nCount_RNA")
+```
+
+```{r, eval=FALSE}
+saveRDS(object = Flex, file = "./rds_qs/Flex_preprocessed.rds")
+```
+
+
+```{r, eval=TRUE}
+Flex <- readRDS(file = "./rds_qs/Flex_preprocessed.rds")
+
+```
+
+
+```{r, eval=T}
+DimPlot(Flex, reduction = "umap.unintegrated", 
+        group.by = c("sample", "unintegrated_clusters", "label"),
+        label = T, ncol = 2,  repel = T)
+
+```
+```{r}
+dittoSeq::dittoBarPlot(object = Flex, group.by = "sample", var = "unintegrated_clusters")
+
+```
+```{r}
+FeatureScatter(object = Flex, feature1 = "nCount_RNA",feature2 =  "nFeature_RNA", group.by = "sample" , )
+```
+
+```{r, eval=FALSE}
+Flex_samples <- SplitObject(object = Flex, split.by = "sample")
+rm(Flex)
+gc()
+```
+
+
+```{r}
+samples <- c("iESC_0h", "iESC_6h","iESC_12h", "iESC_24h",
+             "iESC_48h", "iESC_72h", "iESC_96h", "iESC_120h")
+```
+
+
+```{r}
+
+Flex_samples <- readRDS(file = "./rds_qs/Flex_samples.rds")
+rm(Flex)
+gc()
+```
+
+
+
+
+```{r, fig.width=9, fig.height=9}
+library(gridExtra)
+plot_list <- list()
+
+for (i in samples) {
+  p <- FeatureScatter(object = Flex_samples[[i]], group.by = "sample", feature1 = "nCount_RNA",feature2 =  "nFeature_RNA", shuffle = T )+ 
+    geom_vline( xintercept=c(5000, 60000)) + geom_hline(yintercept = c(2000, 10000))# + NoLegend()
+  plot_list[[i]] <- p 
+  
+}
+
+n <- length(plot_list)
+nCol <- floor(sqrt(n))
+do.call("grid.arrange", c(plot_list, ncol=3))
+
+```
+
+
+
+```{r, eval=FALSE}
+
+for (i in samples) {
+  Flex_samples[[i]] <- subset(Flex_samples[[i]], 
+                                      subset = nFeature_RNA > 2000 & nFeature_RNA < 10000 & nCount_RNA > 5000 & nCount_RNA < 60000)
+  Flex_samples[[i]] <- NormalizeData(Flex_samples[[i]])
+  Flex_samples[[i]] <- FindVariableFeatures(Flex_samples[[i]])
+  Flex_samples[[i]] <- ScaleData(Flex_samples[[i]])
+  Flex_samples[[i]] <- RunPCA(Flex_samples[[i]])
+  Flex_samples[[i]] <- FindNeighbors(Flex_samples[[i]], dims = 1:30, reduction = "pca")
+  Flex_samples[[i]] <- FindClusters(Flex_samples[[i]], resolution = 0.2)
+  Flex_samples[[i]] <- RunUMAP(Flex_samples[[i]], dims = 1:30, reduction = "pca")
+}
+
+```
+
+
+
+```{r, fig.width=9, fig.height=6}
+plot_list_2 <- list()
+
+for (i in samples) {
+  p <- DimPlot(Flex_samples[[i]], reduction = "umap", label = T) + NoAxes() + NoLegend() + ggtitle(i)
+  plot_list_2[[i]] <- p 
+  
+}
+
+n <- length(plot_list)
+nCol <- floor(sqrt(n))
+do.call("grid.arrange", c(plot_list_2, nrow=2))
+
+```
+
+
+```{r, eval=FALSE}
+saveRDS(object = Flex_samples, file = "Flex_samples.rds")
+
+```
+
+
+
+```{r, eval=FALSE}
+Epi <- c("SOX2","POU5F1","NANOG","DPPA2","DPPA4","OTX2","MYC","NANOGP8","FGF2")
+NeuroEct <- c("LHX5", "NEUROD1", "PAX6", "SOX1", "NEUROG1","ASCL1","SOX2")
+BMP4_early <- c("GATA3","GATA2","MSX2","HES1","HEY1","ID1","ID2","ID4")
+MesEndod <- c("EOMES","TBXT","MIXL1","GSC","KDR","CDH2","WNT3A","FGF4","NODAL")
+Meso_early <- c("TBXT","SNAI2","GATA6","PDGFRA","GATA4","FGF17")
+Paraxial <- c("TBX6","MSGN1","CDX2","RSPO3","EVX1","DLL3","DLL1","DUSP6","GATA4","MESP2","IRX3","LHX1")
+Somitic <- c("MESP2","RIPPLY2","HEYL","HOPX","PARAXIS","MEOX1","SHISA2","CPM","PAX1","PAX9","NKX3-2","FOXC2","SOX9","TWIST1")
+lateral_Meso <- c("NKX2-5","FOXC1","PRRX1","HOXB5","ISL1","HAND1","FOXF1","GATA4","SNAI1","HOPX","HOXC8","FOXF1") 
+Cardiac_Meso <- c("NKX2-5","TBX20","GARP","LRRC32")
+Endoderm <- c("FOXA2","SOX17","FOXA1","GATA6","GATA4","CXCR4","TRIM17","APOA1","RIPPLY3","CER1")
+PGCLCs <- c("SOX17","TFAP2C","PRDM1","NANOG","NANOS3","NANOGP8")
+Amnion <- c("GATA3","WNT6","ISL1","HAND1","TGFBI","ACTC1","GATA2","KRT8","KRT18","TFAP2A","TFAP2C")
+
+allmarkers <-  c("SOX2","POU5F1","NANOG","DPPA2","DPPA4","OTX2","MYC","NANOGP8","FGF2",
+                 "LHX5", "NEUROD1", "PAX6", "SOX1", "NEUROG1","ASCL1","SOX2",
+                 "GATA3","GATA2","MSX2","HES1","HEY1","ID1","ID2","ID4",
+                 "EOMES","TBXT","MIXL1","GSC","KDR","CDH2","WNT3A","FGF4","NODAL",
+                 "TBXT","SNAI2","GATA6","PDGFRA","GATA4","FGF17",
+                 "TBX6","MSGN1","CDX2","RSPO3","EVX1","DLL3","DLL1","DUSP6","GATA4","MESP2","IRX3","LHX1",
+                 "MESP2","RIPPLY2","HEYL","HOPX","PARAXIS","MEOX1","SHISA2","CPM","PAX1","PAX9","NKX3-2","FOXC2","SOX9","TWIST1",
+                 "NKX2-5","FOXC1","PRRX1","HOXB5","ISL1","HAND1","FOXF1","GATA4","SNAI1","HOPX","HOXC8","FOXF1",
+                 "TBX20","GARP","LRRC32",
+                 "FOXA2","SOX17","FOXA1","GATA6","GATA4","CXCR4","TRIM17","APOA1","RIPPLY3","CER1",
+                 "SOX17","TFAP2C","PRDM1","NANOG","NANOS3","NANOGP8",
+                 "GATA3","WNT6","ISL1","HAND1","TGFBI","ACTC1","GATA2","KRT8","KRT18","TFAP2A","TFAP2C")
+```
+
+
+```{r}
+allmarkers <- c("SOX2", "POU5F1", "NANOG",  "MYC", "FGF2", # Epi
+                "GATA3", "HEY1", # BMP4_early
+                "EOMES", "KDR",  # MesEndod
+                "SNAI2", "PDGFRA", # Meso_early
+                "RSPO3", "DLL1", "DUSP6", # Paraxial 
+                "SOX9", "TWIST1",  # Somitic
+                "FOXF1", "SNAI1", # lateral_Meso
+                "CXCR4", "APOA1", # Endoderm
+                "TGFBI", "KRT8", "KRT18" # Amnion
+                )
+
+```
+
+```{r, fig.width=9}
+plot_list_7 <- list()
+
+for (i in samples) {
+  p <-DoHeatmap(object = Flex_samples[[i]], group.by = "RNA_snn_res.0.2", features = allmarkers ) + NoLegend() + ggtitle(i)
+  plot_list_7[[i]] <- p 
+  
+}
+
+do.call("grid.arrange", c(plot_list_7, nrow=2))
+
+```
+
+
+# Save for Harmony + Palantir
+
+
+```{r}
+source(file = "../ESC_cEBPa_GRAF/utils/downsample_cells.R")
+```
+
+```{r}
+Flex_samples <- readRDS(file = "./rds_qs/Flex_samples.rds")
+seurat_object <- subset(x = Flex_samples, subset = T,  cells = rownames(Flex_samples))
+
+```
+
+
+```{r,eval=FALSE}
+
+seurat_object <- merge(x = Flex_samples[[1]],
+                       y = c(Flex_samples[[6]],
+                             Flex_samples[[3]], Flex_samples[[4]],
+                             Flex_samples[[5]], Flex_samples[[7]],
+                             Flex_samples[[8]], Flex_samples[[2]]),
+                       merge.data = T, merge.dr = "umap.unintegrated", project = "merged")
+
+rm(Flex_samples)
+gc()
+
+#seurat_object <- downsample_cells(seurat = seurat_object, var = "sample", n_cells = 40000)
+seurat_object <- subset(x = seurat_object, cells = rownames(dfl))
+
+gc()
+
+seurat_object <- JoinLayers(object = seurat_object)
+
+saveRDS(object = seurat_object, file = "rds_qs/Flex_samples_subset.rds")
+
+```
+
+
+## convert to anndata
+
+```{r,eval=FALSE}
+X <- as.matrix(t(seurat_object@assays$RNA$counts))
+
+ad <- AnnData(
+  X = as.matrix(t(seurat_object@assays$RNA$counts)),
+  obs = as.data.frame(seurat_object@meta.data),
+  var = data.frame(gene_ID = colnames(X),# row.names = as.character(1:length(colnames(X))) )
+                   colnames(X) )
+  )
+
+gc()
+write_h5ad(anndata = ad,filename = "flex_subset_sorted_2.h5ad")
+
+```
+## Open the results from Palantir
+
+```{r}
+#seurat_object <- readRDS( file = "rds_qs/Flex_samples_subset.rds")
+seurat_object <- readRDS( file = "rds_qs/flex_palantir_subset.rds")
+```
+
+
+```{r, eval=FALSE}
+dfl <- read.csv(file = "csv/dfl_flex_palantir_coords_oct24.csv", row.names = 1)
+head(dfl)
+
+colnames(dfl) <- c("dfl_1", "dfl_2")
+
+# create dim red
+seurat_object[["dfl"]] = CreateDimReducObject(embeddings = as.matrix(dfl), key = "dfl_")
+DimPlot(seurat_object, reduction = "dfl")
+
+# import palantir clusters
+
+metadata2 <-  read.csv(file = "./csv/dfl_flex_palantir_metadata_oct24.csv", row.names = 1)
+seurat_object@meta.data$palantir_clusters <- metadata2$palantir_clusters
+```
+
+
+```{r, eval=TRUE}
+DimPlot(seurat_object, reduction = "dfl", group.by = "palantir_clusters", label = T) + NoAxes()
+
+
+```
+```{r}
+
+dittoBarPlot(object = seurat_object, var = "palantir_clusters", group.by = "sample",
+             retain.factor.levels = T, color.panel = ggplotColours(n = 25) )
+```
+
+
+```{r}
+samples <- unique(seurat_object$sample)
+samples_plot <- list()
+
+for ( i in samples)
+{
+ p <-  DimPlot(object = seurat_object, reduction = "dfl", pt.size = 0.1,alpha = 0.1,
+          cells.highlight = colnames(seurat_object)[seurat_object@meta.data$sample == i]  ) + NoAxes() + NoLegend() + ggtitle(i)
+    samples_plot[[i]] <- p 
+  
+}
+
+do.call("grid.arrange", c(samples_plot, nrow=2))
+
+
+```
+
+
+```{r}
+ggplotColours <- function(n = 6, h = c(0, 360) + 15){
+  if ((diff(h) %% 360) < 1) h[2] <- h[2] - 360/n
+  hcl(h = (seq(h[1], h[2], length = n)), c = 100, l = 65)
+}
+```
+
+
+```{r}
+library(RColorBrewer)
+allmarkers_2 <- c("SOX2",   "POU5F1", "NANOG",
+                  "GATA3",  "HEY1",   "EOMES",  "KDR", "SNAI2",  "PDGFRA",
+                  "DUSP6",  "FOXF1", "SNAI1", 
+                  "CXCR4",  "APOA1",  "TGFBI" )
+
+DotPlot(object = seurat_object, features = allmarkers_2,cols = c("RdBu"), group.by = "palantir_clusters")+   RotatedAxis() 
+```
+
+
+```{r, eval=FALSE}
+
+current.cluster.ids <- as.character(0:24)
+
+# Pluripotent <- 0,1,3,4,5, 10,16, 18
+# BMP-induced progenitors <- 6
+# Mesendoderm <-  7, 8, 23, 11
+# Early Mesoderm <- 15,20,21
+# late mesoderm <- 13, 20, 9
+# PGCLCs  <- 19
+# Endoderm <- 14
+# Amnion-precursors <- 12, 22
+# Amnion <- 17,2
+
+new.cluster.ids     <- c("Pluripotent","Pluripotent",
+                         "Amnion",
+                         "Pluripotent", "Pluripotent", "Pluripotent",
+                         "BMP-induced Prog",
+                         "Mesendoderm", # 7
+                         "Mesendoderm", "Late Mesoderm", "Pluripotent", #10
+                         "Mesendoderm", "Amnion-precursors", "Late Mesoderm", #13
+                         "Endoderm", "Early Mesoderm", "Pluripotent", #16
+                         "Amnion", "Pluripotent", "PGCLCs", #19
+                         "Late Mesoderm", "Early Mesoderm", "Amnion-precursors", #22
+                         "Mesendoderm","Endoderm"
+                         )
+  
+
+seurat_object@meta.data$Anno_161024 <- plyr::mapvalues(x=seurat_object@meta.data$palantir_clusters,
+                                                             from = current.cluster.ids,
+                                                             to = new.cluster.ids)
+
+
+seurat_object@meta.data$Anno_161024 <- factor(x = seurat_object@meta.data$Anno_161024, 
+                                              levels = c("Pluripotent","BMP-induced Prog",
+                                                         "Mesendoderm", "Early Mesoderm", 
+                                                         "Late Mesoderm", "PGCLCs", 
+                                                         "Endoderm", "Amnion-precursors", 
+                                                         "Amnion"),
+                                              ordered = T)
+
+
+seurat_object <- SetIdent(object = seurat_object, value = "Anno_161024")
+```
+
+
+```{r}
+
+p1 <- DimPlot(seurat_object, reduction = "dfl", alpha = 0.5, pt.size = 0.5) + NoAxes() + NoLegend()
+p1
+#ggsave(filename = "./plots/dfl_flex_high_res.jpeg", device = jpeg,dpi = 300, width = 6, height = 9 )
+
+```
+
+
+```{r}
+library(RColorBrewer)
+allmarkers_2 <- c("SOX2",   "POU5F1", "NANOG",# "WNT5B",
+                  #"GATA3",  "HEY1",  
+                  "EOMES",  "KDR", "SNAI2",  "PDGFRA",
+                  "DUSP6",  "FOXF1", "SNAI1", 
+                  "CXCR4",  "APOA1",
+                  "GATA3","TGFBI" )
+
+p2 <- DotPlot(object = seurat_object, features = allmarkers_2, cols = "RdBu", col.max = 2) + RotatedAxis() 
+p2
+#ggsave(plot = p2 , filename = "./plots/flex_dotplot_res.jpeg", device = jpeg,dpi = 300, width = 12, height = 6 )
+
+```
+
+```{r}
+
+dittoBarPlot(object = seurat_object, var = "Anno_161024", group.by = "sample",
+             retain.factor.levels = T, color.panel = ggplotColours(n = 9) )
+
+
+```
+
+```{r, eval=FALSE}
+write_rds(x = seurat_object, file = "./rds_qs/flex_palantir_subset.rds")
+```
+
+
+
+## Relabel Pluripotent to BMP4 early based on markers 
+
+```{r}
+seurat_object <- readRDS(file = "./rds_qs/flex_palantir_subset_221024.rds")
+
+```
+
+```{r}
+rm(Flex_samples)
+gc()
+```
+
+
+```{r, eval=FALSE}
+
+current.cluster.ids <- as.character(0:24)
+
+# Pluripotent <- 0,1,4, 10, 18
+# BMP-induced progenitors <- 3,5,6, 16
+# Mesendoderm <-  7, 8, 23, 11
+# Early Mesoderm <- 15,20,21
+# late mesoderm <- 13, 20, 9
+# PGCLCs  <- 19
+# Endoderm <- 14
+# Amnion-precursors <- 12, 22
+# Amnion <- 17,2
+
+new.cluster.ids     <- c("Pluripotent","Pluripotent",
+                         "Amnion",
+                         "BMP-induced Prog", "Pluripotent", "BMP-induced Prog",
+                         "BMP-induced Prog",
+                         "Mesendoderm", # 7
+                         "Mesendoderm", "Late Mesoderm", "BMP-induced Prog", #10
+                         "Mesendoderm", "Amnion-precursors", "Late Mesoderm", #13
+                         "Endoderm", "Early Mesoderm", "BMP-induced Prog", #16
+                         "Amnion", "Pluripotent", "PGCLCs", #19
+                         "Late Mesoderm", "Early Mesoderm", "Amnion-precursors", #22
+                         "Mesendoderm","Endoderm"
+                         )
+  
+
+seurat_object@meta.data$Anno_221024 <- plyr::mapvalues(x=seurat_object@meta.data$palantir_clusters,
+                                                             from = current.cluster.ids,
+                                                             to = new.cluster.ids)
+
+
+seurat_object@meta.data$Anno_221024 <- factor(x = seurat_object@meta.data$Anno_221024, 
+                                              levels = c("Pluripotent","BMP-induced Prog",
+                                                         "Mesendoderm", "Early Mesoderm", 
+                                                         "Late Mesoderm", "PGCLCs", 
+                                                         "Endoderm", "Amnion-precursors", 
+                                                         "Amnion"),
+                                              ordered = T)
+
+
+seurat_object <- SetIdent(object = seurat_object, value = "Anno_221024")
+```
+
+
+```{r}
+
+p1 <- DimPlot(seurat_object, reduction = "dfl", alpha = 0.5, pt.size = 0.5) + NoAxes() + NoLegend()
+p1
+ggsave(filename = "./plots/dfl_flex_high_res_221024.jpeg", device = jpeg,dpi = 300, width = 6, height = 9 )
+
+```
+
+
+```{r}
+library(RColorBrewer)
+#allmarkers_2 <- c("SOX2",   "NANOG",# "WNT5B"
+#                  "MSX2", "HES1",
+#                  #"GATA3",  "HEY1",  
+#                  "EOMES",  "SNAI2",  "PDGFRA",
+#                  "FOXF1", "SNAI1", 
+#                  "CXCR4",  "APOA1",
+#                  "GATA3","TGFBI" )
+
+allmarkers_2 <- c("SOX2",   "NANOG", "POU5F1",# "WNT5B"
+                  #"MSX2", "HES1",
+                  "BMP7", "GATA3",#  "HEY1",  
+                  "EOMES", "KDR",  "SNAI2",  "PDGFRA",
+                  "FOXF1", "SNAI1", 
+                  "CXCR4",  "APOA1",
+                  "KRT7",
+                  "TGFBI" )
+p2 <- DotPlot(object = seurat_object, features = allmarkers_2, scale = T, cols = "RdBu", col.max = 2)  + RotatedAxis()
+#p2 <- DotPlot(object = seurat_object, features = allmarkers_2, scale = F)  + RotatedAxis() + scale_colour_gradient2(low = "white", mid = "#fdbb84", high = "#ce1256")
+p2
+#ggsave(plot = p2 , filename = "./plots/flex_dotplot_res_221024.jpeg", device = jpeg,dpi = 300, width = 12, height = 6 )
+
+```
+
+```{r}
+
+dittoBarPlot(object = seurat_object, var = "Anno_221024", group.by = "sample",
+             retain.factor.levels = T, color.panel = ggplotColours(n = 9) )
+
+
+```
+
+```{r, eval=FALSE}
+write_rds(x = seurat_object, file = "./rds_qs/flex_palantir_subset_221024.rds")
+```
+
+
+```{r}
+BMP_markers_flex <- FindMarkers(object = seurat_object, ident.1 = "BMP-induced Prog",ident.2 = "Pluripotent", only.pos = T)
+BMP_markers_flex <- BMP_markers_flex[1:1000, ]
+BMP_markers_flex$gene <- rownames(BMP_markers_flex)
+
+write_csv(x = BMP_markers_flex, file = "./csv/BMP_markers_flex.csv")
+
+```
+
