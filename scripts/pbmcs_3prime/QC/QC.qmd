@@ -1,0 +1,132 @@
+---
+title: "Quality Control - PBMCs 3prime"
+subtitle: "Emanuele Pitino"
+date: "`r Sys.Date()`"
+format: 
+  html:
+    theme: superhero
+    smooth-scroll: true
+    code-fold: true
+    self-contained: true
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+editor: source
+editor_options: 
+  chunk_output_type: console
+execute:
+  echo: true
+---
+
+## Libraries
+```{r}
+suppressPackageStartupMessages({
+library(SingleCellExperiment)
+library(tidySingleCellExperiment)
+library(dplyr)
+library(here)
+library(glue)
+library(qs)
+library(scuttle)
+library(scater)
+library(HDF5Array)
+library(patchwork)
+})
+```
+
+## Data loading
+```{r}
+source(glue("{here()}/scripts/misc/BIN.R")) # bin
+source(glue("{here()}/scripts/misc/paths.R")) # bin
+sce <- qread(glue("{proj_dir}/data/PBMCs_3prime/raw/raw_sce.qs"))
+sce
+
+sce$Sample <- "PBMCs_3prime"
+```
+
+# Add quality metrics
+```{r}
+mito <- grep("^MT-", rownames(sce))
+sce <- addPerCellQCMetrics(sce, subsets=list(mito=mito))
+```
+
+# Find outliers
+```{r}
+# Sum outliers
+discard_sum <- isOutlier(sce$sum, 
+                         type = "lower", 
+                         log = TRUE,
+                         nmads = 2.5,
+                         batch = sce$Sample)
+# Detected outliers
+discard_detected <- isOutlier(sce$detected, 
+                         type = "lower", 
+                         log = TRUE,
+                         nmads = 2.5,
+                         batch = sce$Sample)
+# Detected outliers
+discard_mito <- isOutlier(sce$subsets_mito_percent, 
+                         type = "higher", 
+                         log = F,
+                         nmads = 3.5,
+                         batch = sce$Sample)
+
+# Add to sce obj
+discard_vars <- c("discard_sum", "discard_detected", "discard_mito")
+colData(sce)[, discard_vars] <- lapply(discard_vars,\(.) {(get(.))})
+```
+
+## Plot function
+```{r}
+plot_qcmet <- \(qcvar){
+  if (qcvar == "sum") {color <- "discard_sum"} 
+  else if (qcvar == "detected") {color <- "discard_detected"}
+  else if (qcvar == "subsets_mito_percent") { color <- "discard_mito"} 
+  else { stop("Invalid qcvar value. Must be one of: 'sum', 'detected', 'mito'.") }
+
+  ggplot(sce, aes(x = Sample, y = !!sym(qcvar), color = !!sym(color))) +
+    #ggrastr::rasterise(ggbeeswarm::geom_quasirandom(size = 0.1), dpi = 1200) +
+    ggbeeswarm::geom_quasirandom(size = 0.1) +
+    scale_color_manual(
+      values = c("FALSE" = "grey80", "TRUE" = "red4")) +
+    labs(color = "Discard") +
+    theme_bw() +
+    theme(
+      panel.grid = element_blank(),
+      axis.text = element_text(size = 8, color = "black"),
+      axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+      axis.title = element_text(color = "black", size = 12)
+    ) + 
+    guides(color = guide_legend(override.aes = list(size = 5)))
+}
+```
+
+```{r, fig.width = 4, fig.height= 7}
+ wrap_plots(
+            plot_qcmet("sum") + theme(axis.text.x = element_blank(),
+                                      axis.title.x = element_blank(),
+                                      axis.ticks.x = element_blank(),
+                                      legend.position = "none") +
+              scale_y_log10() +
+              labs(y = "nCount"),
+            plot_qcmet("detected") + theme(axis.text.x = element_blank(),
+                                      axis.title.x = element_blank(),
+                                      axis.ticks.x = element_blank()) +
+              scale_y_log10()+
+              labs(y = "nFeature"),
+            plot_qcmet("subsets_mito_percent") + theme(legend.position = "none")+
+              labs(y = "mito %"),
+            ncol = 1)
+```
+
+
+```{r}
+sce <- sce[,sce$discard_sum == FALSE & sce$discard_detected == FALSE & sce$discard_mito == FALSE]
+```
+
+
+```{r}
+dir.create(glue("{proj_dir}/data/PBMCs_3prime/QC"), showWarnings = F)
+qsave(sce, file = glue("{proj_dir}/data/PBMCs_3prime/QC/QC1.qs"), nthreads = 8)
+```

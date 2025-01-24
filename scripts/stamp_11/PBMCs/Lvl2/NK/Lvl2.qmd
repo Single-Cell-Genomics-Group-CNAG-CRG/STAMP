@@ -104,7 +104,7 @@ ggplot(df, aes(x = x_centroid, y = y_centroid, color = label)) +
 Here we want to distinguish main lineages such as T/B lymphocytes and Myeloid cells.
 ```{r}
 sce$lvl2[sce$label == 1] <- "CD56hi CD16- NK"
-sce$lvl2[sce$label == 3] <- "lowQ"
+sce$lvl2[sce$label %in% c(3,11)] <- "lowQ"
 sce$lvl2[sce$label %in% c(2,4,5,6,7,8,9)] <- "CD56low CD16high NK"
 sce$lvl2[sce$label == 10] <- "cycling NK"
 ```

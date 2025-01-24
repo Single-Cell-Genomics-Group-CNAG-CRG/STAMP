@@ -1,0 +1,103 @@
+---
+title: "Doublets scoring - PBMCs 3 prime"
+subtitle: "Emanuele Pitino"
+date: "`r Sys.Date()`"
+format: 
+  html:
+    theme: superhero
+    smooth-scroll: true
+    code-fold: true
+    self-contained: true
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+editor: source
+editor_options: 
+  chunk_output_type: console
+execute:
+  echo: true
+---
+
+## Libraries
+```{r}
+suppressPackageStartupMessages({
+library(SingleCellExperiment)
+library(tidySingleCellExperiment)
+library(dplyr)
+library(here)
+library(glue)
+library(qs)
+library(scuttle)
+library(scater)
+library(HDF5Array)
+library(patchwork)
+library(scDblFinder)
+library(scran)
+library(BiocSingular)
+library(PCAtools)
+})
+```
+
+## Data loading
+We load the single cell experiment objects already cleaned on quality metrics.
+```{r}
+source(glue("{here()}/scripts/misc/BIN.R")) # bin
+source(glue("{here()}/scripts/misc/paths.R")) # paths
+sce <- qread(glue("{proj_dir}/data/PBMCs_3prime/QC/QC1.qs"), nthreads = 8)
+```
+
+# Pre processing
+We first start this analysis by doing a basic pre processing, then run scDblFinder with the cluster assignments.
+
+## logNormalize
+```{r}
+sce <- logNormCounts(sce)
+```
+
+## Find variable features
+```{r}
+dec.var <- modelGeneVar(sce, BPPARAM = bp) # model gene var
+hvg <- getTopHVGs(dec.var,fdr.threshold = 0.8) # find variable features by fdr 
+length(hvg)
+
+```
+
+## Run PCA
+```{r}
+set.seed(101000)
+sce <-  runPCA(sce, subset_row = hvg)
+```
+
+### Find dimensionality of the dataset
+```{r, fig.width= 4 , fig.height= 6}
+percent.var <- attr(reducedDim(sce), "percentVar")
+plot(percent.var, log="y", xlab="PC", ylab="Variance explained (%)")
+
+reducedDim(sce, "PCA") <- reducedDim(sce, "PCA")[, 1:20]
+```
+
+## Cluster
+We will first build the snn graph with the Jaccard distance, and the run Louvain on such graph.
+```{r}
+snn.gr <- buildSNNGraph(sce, type = "jaccard", use.dimred="PCA", BPPARAM = bp)
+  # Run Louvain
+clusters <- igraph::cluster_louvain(snn.gr, resolution = 1)
+  # Assign back to sce obj
+sce$label <- clusters$membership
+```
+
+# Run scDblFinder
+```{r}
+sce <- suppressMessages(scDblFinder(sce, clusters = sce$label, BPPARAM = bp))
+```
+
+# Save
+```{r}
+qsave(sce,file = glue("{proj_dir}/data/PBMCs_3prime/QC/doublets_sce.qs"), nthreads = 8)
+```
+
+```{r}
+sessionInfo()
+```
+

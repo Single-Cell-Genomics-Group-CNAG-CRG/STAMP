@@ -5,6 +5,7 @@ suppressPackageStartupMessages({
   library(SparseArray)
   library(glue)
   library(here)
+  library(data.table)
   library(SingleCellExperiment)
 })
 

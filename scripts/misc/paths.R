@@ -1,6 +1,6 @@
 
 ## PATHS and common variables
-proj_dir <- "/Users/emanuelepitino/Documents/PhD/Projects.nosync/Stamp_V4"
+proj_dir <- "/Users/emanuelepitino/PhD_Projects/Stamp_V4"
 
 ## Create directory for plots
 plt_dir <- glue::glue("{proj_dir}/plots")

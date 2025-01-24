@@ -66,6 +66,7 @@ layout(3000,6200,"F","F","M","U")
 layout(3000,6500,"G","G","N","V")
 
 plots_dir <- glue("{plt_dir}/{stamp}")
+dir.create(plots_dir,showWarnings = F)
 pdf(glue("{plots_dir}/layout.pdf"), width = 15)
 wrap_plots(layout_plt, ncol = 2) +
   plot_layout(axis_titles = "collect")

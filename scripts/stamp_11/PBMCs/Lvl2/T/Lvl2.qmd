@@ -83,10 +83,6 @@ gg_clust_2 <- wrap_plots(
 plot_annotation(tag_levels = "A")
 ```
 
-```{r}
-sub <- sce[,sample(colnames(sce),1000)]
-plotHeatmap(sub, order_columns_by = "lvl2", features = feat)
-```
 
 ```{r}
 df <- df[sample(rownames(df)),]
@@ -109,6 +105,11 @@ sce$lvl2[sce$label == "6"] <- "Gamma-Delta T"
 ```
 
 ```{r}
+sub <- sce[,sample(colnames(sce),1000)]
+plotHeatmap(sub, order_columns_by = "lvl2", features = feat)
+```
+
+```{r}
 #sce$lvl2 <- factor(sce$lvl1, levels = c("T","NK","B","Myeloid", "LowQ"))
 ```
 
@@ -118,7 +119,7 @@ pal_lvl2 <- Polychrome::createPalette(26,c("#99FFFF", "#FF99FF", "#FFFF99"))
 names(pal_lvl2) <- unique(sce$lvl2)
 ```
 
-# Find new markers for lvl1
+# Find new markers for lvl2
 ```{r}
 markers <- scoreMarkers(sce, sce$lvl2, BPPARAM = bp)
 
@@ -158,6 +159,7 @@ dev.off()
 
 
 ```{r}
+sub <- "PBMCs"
 res_dir <- glue("{proj_dir}/data/{stamp}/{sub}/processed/{lin}")
 qsave(sce, glue("{res_dir}/lvl1_sce.qs"), nthreads = 8)
 ```

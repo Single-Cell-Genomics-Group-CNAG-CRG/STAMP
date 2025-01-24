@@ -1,0 +1,208 @@
+---
+title: "Level 1 annotation"
+subtitle: "Emanuele Pitino"
+date: "`r Sys.Date()`"
+format: 
+  html:
+    theme: superhero
+    smooth-scroll: true
+    code-fold: true
+    self-contained: true
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+editor: source
+editor_options: 
+  chunk_output_type: console
+execute:
+  echo: true
+---
+
+## Libraries
+```{r}
+suppressPackageStartupMessages({
+library(SingleCellExperiment)
+library(tidySingleCellExperiment)
+library(dplyr)
+library(here)
+library(glue)
+library(qs)
+library(scuttle)
+library(scater)
+library(HDF5Array)
+library(patchwork)
+library(scDblFinder)
+library(scran)
+library(BiocSingular)
+library(PCAtools)
+})
+```
+
+## Data loading
+We load the single cell experiment objects already cleaned on quality metrics.
+```{r}
+source(glue("{here()}/scripts/misc/BIN.R")) # bin
+source(glue("{here()}/scripts/misc/paths.R")) # paths
+sce <- qread(glue("{proj_dir}/data/PBMCs_3prime/QC/doublets_sce.qs"), nthreads = 8)
+```
+
+# Find Markers
+As a first step I will calculate marker genes for such clusters 
+```{r}
+snn.gr <- buildSNNGraph(sce, type = "jaccard", use.dimred="PCA", BPPARAM = bp)
+  # Run Louvain
+clusters <- igraph::cluster_louvain(snn.gr, resolution = 0.2)
+  # Assign back to sce obj
+sce$label <- clusters$membership
+
+mrk <- scoreMarkers(sce, groups = sce$label, BPPARAM = bp)
+```
+
+```{r}
+sce <- runUMAP(sce, BPPARAM = bp)
+```
+
+## Order by logFC and save as external csv
+```{r}
+mrk_ord <- lapply(mrk, \(.)(.[order(.$mean.logFC.cohen, decreasing=TRUE),])) # order by logFC
+mrk_ord <- lapply(mrk_ord,\(.){.$gene <- rownames(.); .})
+mrk_ord <- lapply(mrk_ord,\(.)(.[1:100,])) # take top  markers by logFC
+mrk_ord <- lapply(mrk_ord,\(.)(.[,c("gene","mean.logFC.cohen")])) # keep only columns of interest
+mrk_ord <- lapply(mrk_ord,\(.){.$mean.logFC.cohen <- round(.$mean.logFC.cohen,2); .}) # round values
+
+library(openxlsx)
+# Create a new workbook
+wb <- createWorkbook()
+# Loop through the list and add each element as a sheet
+for (name in names(mrk_ord)) {
+
+  addWorksheet(wb, name)                    # Add a new sheet with the list element name
+  writeData(wb, sheet = name, mrk_ord[[name]]) # Write the data to the sheet
+}
+# Save the workbook
+dir.create(glue("{proj_dir}/Markers/PBMCs_3prime"), showWarnings = F, recursive = T)
+saveWorkbook(wb, glue("{proj_dir}/Markers/PBMCs_3prime/lvl1.xlsx"), overwrite = TRUE)
+```
+
+# Top markers vizualization
+
+## Heatmap
+```{r, fig.height= 10}
+top_feat <- unname(lapply(mrk_ord,\(.)(.$gene[1:5])))
+top_feat <- unique(unlist(top_feat))
+
+plotGroupedHeatmap(sce, features = top_feat, group = "label",scale = T, center = T) +
+  theme(axis.text.x = element_text(angle = -45, vjust = 1, hjust = 1),
+        aspect.ratio = 2/1)
+```
+
+## DotPlot
+```{r, fig.width= 18}
+plotDots(sce, features = top_feat,group = "label", scale = T, center = T) +
+  coord_flip() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        aspect.ratio = 1/4)
+```
+
+```{r}
+sce$label <- as.character(sce$label)
+wrap_plots(
+  plotReducedDim(sce,"UMAP",scattermore = T, color_by = "label", text_by = "label", point_size = 1) + scale_color_manual(values = palette_general()) +
+    theme(aspect.ratio = 1/1),
+  
+  plotDots(sce, features = c("CD3E","CD8A","CD4","CD79A","CD79B","NKG7","NCAM1","CD14","FCGR3A","CD1C"),group = "label", scale = T, center = T) +
+  coord_flip() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        aspect.ratio = 1/4),
+  ncol = 2)
+```
+
+# Proportion of cells in each cluster
+```{r}
+df <- as.data.frame(table(sce$label)) %>%
+  mutate(pct = Freq / sum(Freq))
+
+df$Var1 <- factor(df$Var1, levels = df$Var1[order(df$pct)])
+
+ggplot(df, aes(x = "",y = pct, fill = Var1)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_manual(values = palette_general()) +
+  theme_bw(16) +
+  theme(panel.grid = element_blank(),
+        aspect.ratio = 1/4,
+        legend.position = "top") +
+  guides(fill = guide_legend(ncol = 5, reverse = T)) +
+  labs(x = "", y = "Fraction", fill = "Cluster")
+```
+
+# Doublets / Erythrocytes by cluster
+This will help, together with the top markers, identify and exclude real doublets and erythrocytes.
+
+```{r}
+df <- as.data.frame(table(sce$label,sce$scDblFinder.class)) %>%
+  group_by(Var1) %>%
+  mutate(pct = Freq / sum(Freq)) %>%
+  ungroup()
+  
+df$Var1 <- factor(df$Var1, levels = df$Var1[df$Var2 == "singlet"][order(-df$pct[df$Var2 == "singlet"])])
+ggplot(df, aes(x = Var1, y = pct, fill = Var2)) + 
+         geom_col() + 
+  theme_bw(16) +
+  theme(aspect.ratio = 1/1.5,
+        panel.grid = element_blank()) +
+  labs(x = "Cluster", y ="Fraction", fill = "scDblFinder") +
+  scale_fill_manual(values = c("singlet" = "grey80", "doublet" = "red4"))
+```
+
+# Annotation
+```{r}
+sce$label <- as.numeric(sce$label)
+sce$lvl1[sce$label == "1"] <- "Doublets"
+sce$lvl1[sce$label == "2"] <- "CD8"
+sce$lvl1[sce$label == "3"] <- "CD4"
+sce$lvl1[sce$label == "4"] <- "Myeloid"
+sce$lvl1[sce$label == "5"] <- "NK"
+sce$lvl1[sce$label == "6"] <- "Doublets"
+sce$lvl1[sce$label == "7"] <- "B"
+sce$lvl1[sce$label == "8"] <- "CD8"
+```
+
+# Proportion of lvl1
+Overall, proportions look in line with what would be expected in PBMCs, with ~65% T cells, ~25% Myeloid cells, and ~5% B cells.
+```{r}
+df <- as.data.frame(table(sce$lvl1)) %>%
+  mutate(pct = Freq / sum(Freq))
+
+df$Var1 <- factor(df$Var1, levels = df$Var1[order(df$pct)])
+
+ggplot(df, aes(x = "",y = pct, fill = Var1)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_manual(values = palette_general()) +
+  theme_bw(16) +
+  theme(panel.grid = element_blank(),
+        aspect.ratio = 1/4,
+        legend.position = "top") +
+  guides(fill = guide_legend(ncol = 5, reverse = T)) +
+  labs(x = "", y = "Fraction", fill = "Lvl1")
+```
+
+```{r}
+wrap_plots(
+  plotReducedDim(sce,"UMAP",scattermore = T, color_by = "lvl1", text_by = "lvl1", point_size = 1) + scale_color_manual(values = palette_general()) +
+    theme(aspect.ratio = 1/1),
+  
+  plotDots(sce, features = c("CD3E","CD8A","CD4","CD79A","CD79B","NKG7","NCAM1","CD14","FCGR3A","CD1C"),group = "lvl1", scale = T, center = T) +
+  coord_flip() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        aspect.ratio = 1/4),
+  ncol = 2)
+```
+
+```{r}
+dir.create(glue("{proj_dir}/data/PBMCs_3prime/Lvl1"))
+qsave(sce, file = glue("{proj_dir}/data/PBMCs_3prime/Lvl1/lvl1_sce.qs"), nthreads = 8)
+```
+

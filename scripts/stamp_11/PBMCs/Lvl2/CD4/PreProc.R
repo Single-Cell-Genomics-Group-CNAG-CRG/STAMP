@@ -27,6 +27,7 @@ source(glue("{dir}/scripts/misc/BIN.R"))
 res_dir <- glue("{proj_dir}/data/{stamp}/{sub}/processed/T")
 sce <- qread(glue("{res_dir}/lvl1_sce.qs"), nthreads = 8)
 
+sce <- sce[,! is.na(sce$lvl2)]
 sce <- sce[,sce$lvl2 == lin]
 sce
 

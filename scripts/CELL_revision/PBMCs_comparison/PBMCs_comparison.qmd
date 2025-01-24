@@ -1,0 +1,86 @@
+---
+title: "PBMCs comparison across platforms"
+subtitle: "Emanuele Pitino"
+date: "`r Sys.Date()`"
+format: 
+  html:
+    theme: superhero
+    smooth-scroll: true
+    code-fold: true
+    self-contained: true
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+editor: source
+editor_options: 
+  chunk_output_type: console
+execute:
+  echo: true
+---
+
+In this script, we will compare basic quality metrics in main PBMCs populations (CD4,CD8,Myeloid,NK,B) across different technologies (STAMP,10xFlex,10x5', 10x3')
+
+## Libraries
+```{r}
+suppressPackageStartupMessages({
+library(SingleCellExperiment)
+library(tidySingleCellExperiment)
+library(dplyr)
+library(here)
+library(glue)
+library(qs)
+library(scuttle)
+library(scater)
+library(HDF5Array)
+library(patchwork)
+library(scDblFinder)
+library(scran)
+library(BiocSingular)
+library(PCAtools)
+})
+```
+
+## Data loading
+We load the single cell experiments already annotated
+```{r}
+source(glue("{here()}/scripts/misc/BIN.R")) # bin
+source(glue("{here()}/scripts/misc/paths.R")) # paths
+
+flex <- qread(glue("{proj_dir}/data/flex_pbmcs/Lvl1/lvl1_sce.qs"), nthreads = 8)
+ten_five <- qread(glue("{proj_dir}/data/PBMCs_5prime/Lvl1/lvl1_sce.qs"), nthreads = 8)
+ten_three <- qread(glue("{proj_dir}/data/PBMCs_3prime/Lvl1/lvl1_sce.qs"), nthreads = 8)
+
+
+stamp_lvl1 <- qread(glue("{proj_dir}/data/stamp_11/PBMCs/processed/lvl1_sce.qs"), nthreads = 8) # stamp-x #11 5k
+stamp_cd4_cd8 <- qread(glue("{proj_dir}/data/stamp_11/PBMCs/processed/T/lvl1_sce.qs"), nthreads = 8) # stamp-x #11 5k
+```
+
+# Homogenize cd of STAMP sce before binding 
+```{r}
+stamp_cd4_cd8$lvl1 <- stamp_cd4_cd8$lvl2
+colData(stamp_cd4_cd8) <- colData(stamp_cd4_cd8)[c("lvl1","sum","detected")]
+
+stamp_lvl1 <- stamp_lvl1[,! stamp_lvl1$lvl1 %in%  c("T","LowQ")]
+colData(stamp_lvl1) <- colData(stamp_lvl1)[c("lvl1","sum","detected")]
+
+stamp <- cbind(stamp_lvl1,stamp_cd4_cd8)
+```
+
+# Merge the 10x datasets
+```{r}
+colData(flex) <- colData(flex)[c("lvl1","sum","detected")]
+colData(ten_five) <- colData(ten_five)[c("lvl1","sum","detected")]
+colData(ten_three) <- colData(ten_three)[c("lvl1","sum","detected")]
+
+flex$tech <- "flex"
+ten_five$tech <- "ten_five"
+ten_three$tech <- "ten_three"
+
+rowData(flex) <- NULL
+rowData(ten_five) <- NULL
+rowData(ten_three) <- NULL
+
+tenx <- cbind(flex,ten_five,ten_three)
+```
+
