@@ -8,6 +8,8 @@ This repository contains the code used in the **STAMP** project, focusing on spa
   - 10X Genomics Xenium
 - **Single Cell RNA sequencing Platforms**:
   - 10X Genomics Flex
+  - 10X 5'
+  - 10X 3'
  
 ## Repository Structure
 
