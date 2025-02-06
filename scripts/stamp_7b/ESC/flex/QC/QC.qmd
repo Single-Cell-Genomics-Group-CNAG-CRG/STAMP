@@ -51,7 +51,7 @@ source(glue("{dir}/scripts/misc/BIN.R"))
 
 ```{r}
 # Define the base directory to search
-base_dir <- glue("{proj_dir}/data/{stamp}/raw/flex_sc/results/filtered_feature_bc_matrix/")
+base_dir <- glue("{proj_dir}/data/{stamp}/raw/flex_sc/results/filtered_feature_bc_matrix")
 
 # Find the folder that ends with the value in `sample`
 dir <- list.dirs(base_dir, recursive = FALSE, full.names = TRUE) %>%

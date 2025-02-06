@@ -1,5 +1,5 @@
 ---
-title: "Quality Control - PBMCs 3prime"
+title: "Quality Control - PBMCs 3'"
 subtitle: "Emanuele Pitino"
 date: "`r Sys.Date()`"
 format: 
@@ -18,6 +18,8 @@ editor_options:
 execute:
   echo: true
 ---
+
+This dataset contains 3' scRNA-seq data from healthy PBMCs. The dataset was downloaded from the 10X genomics website at the following [link](https://www.10xgenomics.com/datasets/10-k-pbm-cs-from-a-healthy-donor-v-3-chemistry-3-standard-3-0-0). The FASTQs have also been downsampled to ~20k reads/cell before mapping with cellranger.
 
 ## Libraries
 ```{r}
@@ -57,13 +59,13 @@ sce <- addPerCellQCMetrics(sce, subsets=list(mito=mito))
 discard_sum <- isOutlier(sce$sum, 
                          type = "lower", 
                          log = TRUE,
-                         nmads = 2.5,
+                         nmads = 2,
                          batch = sce$Sample)
 # Detected outliers
 discard_detected <- isOutlier(sce$detected, 
                          type = "lower", 
                          log = TRUE,
-                         nmads = 2.5,
+                         nmads = 2,
                          batch = sce$Sample)
 # Detected outliers
 discard_mito <- isOutlier(sce$subsets_mito_percent, 

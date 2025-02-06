@@ -25,6 +25,7 @@ tech <- "X"
 sub <- "PBMCs"
 # Load data
 data_dir <- glue("{proj_dir}/data/stamp_{numb}/{sub}")
+#data_dir <- glue("{proj_dir}/data/stamp_{numb}/{sub}")
 barcodes <- fread(glue("{data_dir}/cell_feature_matrix/barcodes.tsv.gz"), sep = "\t", nThread = 3, header = F)
 features <- fread(glue("{data_dir}/cell_feature_matrix/features.tsv.gz"), sep = "\t", nThread = 3, header = F)
 counts <- Matrix::readMM(glue("{data_dir}/cell_feature_matrix/matrix.mtx.gz"))
@@ -63,3 +64,14 @@ dir.create(raw_dir, showWarnings = F)
 
 qsave(sce, file = glue("{proc_dir}/{sname}.qs"), nthreads = 8)
 writeMM(counts(sce), file = glue("{raw_dir}/{sname}.mtx"))
+
+library(R.utils)
+# Save features
+feature_file <- glue("{raw_dir}/{sname}_features.tsv")
+fwrite(data.table(features = as.character(rownames(sce))), quote = FALSE, col.names = FALSE, sep = "\t", file = feature_file)
+gzip(feature_file, overwrite = TRUE)  # Compress to .gz
+
+# Save barcodes
+barcode_file <- glue("{raw_dir}/{sname}_barcodes.tsv")
+fwrite(data.table(features = as.character(colnames(sce))), quote = FALSE, col.names = FALSE, sep = "\t", file = barcode_file)
+gzip(barcode_file, overwrite = TRUE)  # Compress to .gz

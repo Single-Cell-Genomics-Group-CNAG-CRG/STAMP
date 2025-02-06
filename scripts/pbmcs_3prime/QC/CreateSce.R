@@ -17,9 +17,18 @@ source(glue("{dir}/misc/paths.R"))
 source(glue("{dir}/misc/BIN.R"))
 
 data_dir <- glue("{proj_dir}/data/PBMCs_3prime")
-seu <- readRDS(glue("{data_dir}/raw/DOCTIS_ng5stojs_xsyjzcwr_demuxed_singlets.rds"))
 
-sce <- SingleCellExperiment(assay = list(counts = seu@assays$RNA$counts), colData = seu@meta.data)
+sce <- read10xCounts(glue("{data_dir}/raw/filtered_feature_bc_matrix.h5"),
+                     row.names = "symbol",
+                     col.names = T,
+                     delayed = FALSE,
+                     sample.names = "pbmcs_3prime")
+
+counts(sce) <- as(counts(sce),"dgCMatrix")
+sub <- downsampleMatrix(counts(sce),prop = 60)
+
+sce$Barcode <- paste0(sce$Sample,"_",colnames(sce))
+colnames(sce) <- sce$Barcode
 
 # Save sce object as qs file
 dir.create(glue("{data_dir}/raw"), showWarnings = F)

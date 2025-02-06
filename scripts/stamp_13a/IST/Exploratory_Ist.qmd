@@ -50,7 +50,6 @@ source(glue("{dir}/scripts/misc/BIN.R"))
 
 ```{r}
 stamp <- "stamp_13a"
-sample <- "iPSCs"
 res_dir <- glue("{proj_dir}/data/{stamp}/processed")
 sce <- qread(glue("{res_dir}/PreProcNew.qs"), nthreads = 8)
 ```
@@ -258,7 +257,8 @@ dev.off()
 
 
 ```{r}
-dir <- glue("{proj_dir}/data/{stamp}/{sample}/processed")
+dir <- glue("{proj_dir}/data/{stamp}/processed")
+dir.create(dir,showWarnings = F,recursive = T)
 qsave(sce, file = glue("{dir}/ist_sce.qs"), nthreads = 8)
 ```
 

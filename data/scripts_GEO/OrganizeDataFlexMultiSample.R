@@ -66,4 +66,15 @@ dir.create(raw_dir, showWarnings = F)
 
 qsave(sce_ll[[samp]], file = glue("{proc_dir}/{sname}.qs"), nthreads = 8)
 writeMM(counts(sce_ll[[samp]]), file = glue("{raw_dir}/{sname}.mtx"))
+
+library(R.utils)
+# Save features
+feature_file <- glue("{raw_dir}/{sname}_features.tsv")
+fwrite(data.table(features = as.character(rownames(sce_ll[[samp]]))), quote = FALSE, col.names = FALSE, sep = "\t", file = feature_file)
+gzip(feature_file, overwrite = TRUE)  # Compress to .gz
+
+# Save barcodes
+barcode_file <- glue("{raw_dir}/{sname}_barcodes.tsv")
+fwrite(data.table(features = as.character(colnames(sce_ll[[samp]]))), quote = FALSE, col.names = FALSE, sep = "\t", file = barcode_file)
+gzip(barcode_file, overwrite = TRUE)  # Compress to .gz
 }

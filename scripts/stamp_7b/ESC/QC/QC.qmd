@@ -1,0 +1,364 @@
+---
+title: "Quality control - Stamp_7b ESCs"
+format: 
+  html:
+    code-fold: true
+    self-contained: true
+editor: source
+editor_options: 
+  chunk_output_type: console
+execute:
+  echo: true
+---
+```{r}
+# Libraries
+suppressPackageStartupMessages({
+  library(SingleCellExperiment)
+  library(tidyverse)
+  library(dplyr)
+  library(patchwork)
+  library(grid)
+  library(ggpubr)
+  library(here)
+  library(scater)
+  library(scuttle)
+  library(glue)
+  library(scran)
+  library(patchwork)
+  library(qs)
+  library(data.table)
+  library(scales)
+})
+```
+
+```{r}
+dir <- glue("{here()}/scripts")
+# Parameters and paths
+source(glue("{dir}/misc/paths.R"))
+```
+
+
+```{r}
+source(glue("{dir}/misc/BIN.R"))
+data_dir <- glue("{proj_dir}/data/stamp_7b/raw/raw_proc")
+```
+
+
+```{r}
+sce <- qread(glue("{data_dir}/layout_sce.qs"))
+```
+
+```{r}
+sample <- "iESC"
+stamp <- "stamp_7b"
+```
+
+# Filter FOV with 250k PBMCs
+```{r}
+sce <- sce[, grepl("^iESC_", sce$sample)]
+```
+
+```{r}
+sce <- addPerCellQCMetrics(sce)
+sce
+```
+
+# Find Outliers
+```{r}
+# Sum outliers
+discard_sum <- isOutlier(sce$sum, 
+                         type = "both", 
+                         log = TRUE,
+                         nmads = 2)
+# Detected outliers
+discard_detected <- isOutlier(sce$detected, 
+                         type = "both", 
+                         log = TRUE,
+                         nmads = 2.5)
+# Detected outliers
+discard_area <- isOutlier(sce$Area.um2, 
+                         type = "both", 
+                         log = TRUE,
+                         nmads = 2.5)
+```
+
+```{r}
+table(discard_sum)
+table(discard_detected)
+table(discard_area)
+```
+
+
+```{r}
+extr_thr <- function(df){
+return <- list()
+lower <- round(attr(df, 'thresholds')['lower'],0)
+higher <- round(attr(df, 'thresholds')['higher'],0)
+return(c(lower,higher))
+}
+```
+
+```{r}
+gg_hist <- function(df, outliers, var, title) {
+  sum_thr <- extr_thr(outliers)
+  median_val <- round(median(df[[var]]), 2)
+
+  plot <- ggplot(df, aes_string(x = var)) + 
+              geom_histogram(bins = 100)  + 
+              geom_vline(xintercept = sum_thr, linetype = "dashed", color = "red") + 
+              theme(axis.text = element_text(size = 15, color = "black")) + 
+              labs(title = title, 
+                   subtitle = glue::glue("Median: {median_val}; Lower thr: {sum_thr[1]}; Higher thr: {sum_thr[2]}")) + 
+              scale_x_log10()
+  return(plot)
+}
+```
+
+
+```{r}
+df <- as.data.frame(colData(sce))
+
+gg_qc_metrics <- wrap_plots(
+                gg_hist(df, discard_sum, "sum", "Counts"),
+                gg_hist(df, discard_detected, "detected", "Features"),
+                gg_hist(df, discard_area, "Area.um2", "Cell Area"),
+                ncol = 3)
+```
+
+# Filter
+```{r}
+filt <- sce[,sce$nCount_RNA > as.numeric(attr(discard_sum, "threshold")["lower"]) &
+             sce$nCount_RNA < as.numeric(attr(discard_sum, "threshold")["higher"]) &
+             sce$nFeature_RNA > as.numeric(attr(discard_detected, "threshold")["lower"]) &
+             sce$nFeature_RNA < as.numeric(attr(discard_detected, "threshold")["higher"]) &
+             sce$Area.um2 > as.numeric(attr(discard_area, "threshold")["lower"]) &
+             sce$Area.um2 < as.numeric(attr(discard_area, "threshold")["higher"])]
+```
+
+```{r}
+gg_qc_metrics <- gg_qc_metrics +
+                    plot_annotation(title = glue("Quality control - {stamp} - {sample}"),
+                                    subtitle = glue("Before filtering: {number(ncol(sce), big.mark = '.')} C; After filtering: {number(ncol(filt), big.mark = '.')} C")) 
+```
+
+# Border effect
+```{r}
+sce <- filt
+md <- as.data.frame(colData(sce))
+```
+
+```{r}
+right <- md %>%
+        group_by(fov) %>%
+        mutate(d_border_px = max(CenterX_local_px) - CenterX_local_px) %>% 
+        filter(d_border_px < 300) %>%
+        ungroup() %>%
+        mutate(fov_cell = paste0(fov, "_", cell_id))
+
+left <- md %>%
+        group_by(fov) %>%
+        mutate(d_border_px = abs(min(CenterX_local_px) - CenterX_local_px)) %>% 
+        filter(d_border_px < 300) %>%
+        ungroup()%>%
+        mutate(fov_cell = paste0(fov, "_", cell_id))
+
+top <- md %>%
+        group_by(fov) %>%
+        mutate(d_border_px = abs(max(CenterY_local_px) - CenterY_local_px)) %>% 
+        filter(d_border_px < 300) %>%
+        ungroup()%>%
+        mutate(fov_cell = paste0(fov, "_", cell_id))
+
+bottom <- md %>%
+        group_by(fov) %>%
+        mutate(d_border_px = abs(min(CenterY_local_px) - CenterY_local_px)) %>% 
+        filter(d_border_px < 300) %>%
+        ungroup()%>%
+        mutate(fov_cell = paste0(fov, "_", cell_id))
+```
+
+```{r}
+plot_d_border <- function(df, title, thr) {
+  # Number of bins
+  num_bins <- 1000
+  
+  # Create bins based on d_border_px
+  bins <- cut(df$d_border_px, breaks = num_bins, labels = FALSE)
+  
+  # Calculate means within each bin
+  bin_means <- aggregate(df$nCount_RNA, by = list(bin = bins), FUN = mean)
+  bin_centers <- aggregate(df$d_border_px, by = list(bin = bins), FUN = mean)
+  
+  # Combine bin means and centers into a single data frame
+  bin_data <- data.frame(bin_centers = bin_centers$x, bin_means = bin_means$x)
+  
+  # Create the plot
+  p <- ggplot(df, aes(x = d_border_px, y = nCount_RNA)) +
+    geom_point(color = "lightblue", size = 0.1) +
+    geom_line(data = bin_data, aes(x = bin_centers, y = bin_means), color = "darkblue") +
+    geom_hline(yintercept = mean(df$nCount_RNA), color = "red") +
+    geom_vline(xintercept = thr, color = "red", linetype = "dashed") +
+    labs(
+      title = title,
+      x = "Distance from FOV border (px)",
+      y = "nCount_RNA"
+    ) +
+    theme_minimal() +
+    theme(text = element_text(color = "black"))
+  
+  # Return the plot object
+  return(p)
+}
+
+```
+
+```{r}
+wh(20,10)
+par(mfrow = c(2, 2))
+a <-plot_d_border(left[left$d_border_px <300,], "Left", 25)
+b <- plot_d_border(right[right$d_border_px <300,], "Right", 25)
+c <- plot_d_border(bottom[bottom$d_border_px <300,], "Bottom", 25)
+d <- plot_d_border(top[top$d_border_px <300,], "Top", 25)
+```
+
+```{r}
+gg_border_effect <- wrap_plots(a,b,c,d, ncol = 2, nrow = 2) + plot_annotation(title = glue("Border effect on {stamp} - {sample}"))
+```
+
+```{r}
+remove_left <- unique(left$fov_cell[left$d_border_px < 25 & left$nCount_RNA < mean(left$nCount_RNA)])
+remove_right <- unique(right$fov_cell[right$d_border_px < 25 & right$nCount_RNA < mean(right$nCount_RNA)])
+remove_bottom <- unique(bottom$fov_cell[bottom$d_border_px < 25 & bottom$nCount_RNA < mean(bottom$nCount_RNA)])
+remove_top <- unique(top$fov_cell[top$d_border_px < 25 & top$nCount_RNA < mean(top$nCount_RNA)])
+remove <- c(remove_top,remove_bottom,remove_left,remove_right)
+```
+
+```{r}
+sce$fov_cell <- paste0(sce$fov, "_", sce$cell_id)
+
+filt <- sce[,!sce$fov_cell %in% remove]
+sce
+filt
+```
+
+
+```{r}
+tbl_unfilt <- as.data.frame(table(sce$fov))
+tbl_filt <- as.data.frame(table(filt$fov))
+
+colnames(tbl_filt)[colnames(tbl_filt) == "Freq"] <- "Freq_2"
+
+tbl_merged <- merge(tbl_unfilt, tbl_filt, by = "Var1", all = TRUE)
+tbl_merged$pct_removed <- round((((tbl_merged$Freq - tbl_merged$Freq_2)/tbl_merged$Freq)*100), 2)
+tbl_merged$pct_kept <- 100- tbl_merged$pct_removed
+```
+
+
+```{r}
+# Create a new column for the difference
+tbl_merged$cells_removed <- tbl_merged$Freq - tbl_merged$Freq_2
+
+# Calculate the total counts for each FOV
+tbl_merged$Total <- tbl_merged$Freq
+
+# Calculate the relative percentages
+tbl_merged$removed_pct <- tbl_merged$cells_removed / tbl_merged$Total * 100
+
+# Order the data frame by FOV
+tbl_merged <- tbl_merged[order(tbl_merged$Var1),]
+
+# Restructure the data for ggplot2
+tbl_long <- tbl_merged %>%
+  select(Var1, cells_removed, Freq_2) %>%
+  pivot_longer(cols = c(cells_removed, Freq_2), names_to = "Category", values_to = "Count")
+
+tbl_long$Category <- factor(tbl_long$Category, levels = c("Freq_2", "cells_removed"))
+# Calculate the median percentage cells removed
+median_removed_pct <- round(median(tbl_merged$removed_pct), 2)
+total_cells_removed <- sum(tbl_merged$cells_removed)
+total_cells_kept <- sum(tbl_merged$Freq_2)
+
+# Create the ggplot
+gg_border_eff_quantification <- ggplot(tbl_long, aes(x = Var1, y = Count, fill = Category)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = c("grey", "red"), labels = c(glue("Cells Kept (N = {total_cells_kept})"),
+                                                              glue("Cells Removed (N = {total_cells_removed})"))) +
+  labs(
+    x = "FOV", 
+    y = "# Cells", 
+    fill = ""
+  ) +
+  theme(plot.title = element_text(size = 20))  # Increase the title size to 20
+
+# Print the ggplot
+gg_border_eff_quantification <- gg_border_eff_quantification +
+  theme(panel.grid.major = element_blank(), 
+        text = element_text(color = "black"),
+        panel.grid.minor = element_blank(),
+        axis.text.x = element_blank(),
+        legend.position = "top")
+
+# Print the ggplot
+#print(gg_border_eff_quantification)
+```
+
+```{r}
+wrap_plots(gg_border_effect, gg_border_eff_quantification, nrow = 2) +
+  plot_annotation(title  = glue("Border effect - {stamp} - {sample}"),
+    subtitle = paste("Median Cells removed/FOV:", median_removed_pct,"%"),
+    tag_levels = "A")
+```
+
+# Spatial distribution of counts & features
+```{r}
+df <- as.data.frame(colData(filt))
+plot_metrics <- function(data, color_var) {
+  ggplot(df, aes(x = CenterX_global_px, y = CenterY_global_px, color = .data[[color_var]])) + 
+  scale_color_gradientn(colors  = c("gold","navy")) +
+  ggrastr::rasterise(geom_point(size = 0.1, shape = 16), dpi = 600) +
+  theme_bw() + 
+  theme(panel.grid = element_blank(), text = element_text(colour = "black", size = 20), 
+        axis.text = element_text(colour = "black", size = 15)) 
+}
+
+# Plot for nCount_RNA
+gg_spat_counts <- plot_metrics(df, "nCount_RNA")
+# Plot for nFeature_RNA
+gg_spat_feat <- plot_metrics(df, "nFeature_RNA")
+
+gg_spat_metrics <- wrap_plots(gg_spat_counts,gg_spat_feat, ncol = 2) + 
+  plot_annotation(title = glue("{stamp} - {sample}"), tag_levels = "A",theme = theme(plot.title = element_text(size = 30)))
+```
+
+```{r}
+dir <- glue("{plt_dir}/stamp_7b")
+dir.create(dir, showWarnings = FALSE)
+
+pdf(glue("{dir}/QC1.pdf"), width = 14, height = 4 )
+gg_qc_metrics
+dev.off()
+```
+
+
+```{r}
+pdf(glue("{dir}/QC2.pdf"), width = 10, height = 8 )
+wrap_plots(gg_border_effect, gg_border_eff_quantification, nrow = 2) +
+  plot_annotation(title  = glue("Border effect - {stamp} - {sample}"),
+    subtitle = paste("Median Cells removed/FOV:", median_removed_pct,"%"),
+    tag_levels = "A") +
+  plot_layout(heights = c(2,1))
+dev.off()
+```
+
+```{r}
+pdf(glue("{dir}/QC3.pdf"), width = 24, height = 18)
+gg_spat_metrics
+dev.off()
+```
+
+```{r}
+dir <- glue("{proj_dir}/data/stamp_7b/{sample}")
+dir.create(dir, showWarnings = F)
+qsave(filt, glue("{dir}/qc_sce.qs"))
+```
+

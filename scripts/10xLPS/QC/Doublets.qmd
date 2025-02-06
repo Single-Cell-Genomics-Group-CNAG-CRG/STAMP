@@ -1,5 +1,5 @@
 ---
-title: "Doublets scoring - PBMCs 5'"
+title: "Doublets scoring - LPS PBMCs"
 subtitle: "Emanuele Pitino"
 date: "`r Sys.Date()`"
 format: 
@@ -44,7 +44,7 @@ We load the single cell experiment objects already cleaned on quality metrics.
 ```{r}
 source(glue("{here()}/scripts/misc/BIN.R")) # bin
 source(glue("{here()}/scripts/misc/paths.R")) # paths
-sce <- qread(glue("{proj_dir}/data/PBMCs_5prime/QC/QC1.qs"), nthreads = 8)
+sce <- qread(glue("{proj_dir}/data/10xLPS/QC/QC1_lps.qs"), nthreads = 8)
 ```
 
 # Pre processing
@@ -57,13 +57,14 @@ sce <- logNormCounts(sce)
 
 ## Find variable features
 ```{r}
-dec.var <- modelGeneVar(sce, BPPARAM = bp) # model gene var
-hvg <- getTopHVGs(dec.var,fdr.threshold = 0.8) # find variable features by fdr 
+dec.var <- modelGeneVar(sce,BPPARAM = bp) # model gene var
+hvg <- getTopHVGs(dec.var,fdr.threshold = 1) # find variable features by fdr 
+length(hvg)
+hvg <- hvg[1:5000]
 length(hvg)
 ```
 
 ## Run PCA
-
 ```{r}
 set.seed(101000)
 sce <-  runPCA(sce, subset_row = hvg)
@@ -94,7 +95,7 @@ sce <- suppressMessages(scDblFinder(sce, clusters = sce$label, BPPARAM = bp))
 
 # Save
 ```{r}
-qsave(sce,file = glue("{proj_dir}/data/PBMCs_5prime/QC/doublets_sce.qs"), nthreads = 8)
+qsave(sce,file = glue("{proj_dir}/data/10xLPS/QC/doublets_lps_sce.qs"), nthreads = 8)
 ```
 
 ```{r}

@@ -17,11 +17,15 @@ source(glue("{dir}/misc/BIN.R"))
 
 dir <- glue("{proj_dir}/data/PBMCs_5prime")
 
-sce <- read10xCounts(glue("{dir}/sample_filtered_feature_bc_matrix.h5"),
+
+sce <- read10xCounts(glue("{dir}/raw/sample_filtered_feature_bc_matrix.h5"),
                        row.names = "symbol",
                        col.names = T,
-                       delayed = TRUE,
-                       sample.names = "HC")
+                       delayed = FALSE,
+                       sample.names = "5prime")
+
+counts(sce) <- as(counts(sce),"dgCMatrix")
+
 sce$Barcode <- paste0(sce$Sample,"_",colnames(sce))
 colnames(sce) <- sce$Barcode
   

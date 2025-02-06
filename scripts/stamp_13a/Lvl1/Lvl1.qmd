@@ -429,6 +429,7 @@ dev.off()
 
 ```{r}
 dir <- glue("{proj_dir}/data/{stamp}/processed")
+dir.create(dir,showWarnings = F,recursive = T)
 qsave(sce, file = glue("{dir}/anno_sce_P1.qs"), nthreads = 8)
 ```
 

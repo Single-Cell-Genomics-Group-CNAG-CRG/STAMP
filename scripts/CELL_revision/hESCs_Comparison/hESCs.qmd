@@ -1,0 +1,223 @@
+---
+title: "hESCs comparison across Flex & STAMP in paired timepoints"
+subtitle: "Emanuele Pitino"
+date: "`r Sys.Date()`"
+format: 
+  html:
+  theme: superhero
+smooth-scroll: true
+code-fold: true
+self-contained: true
+toc: true
+toc_float: 
+  collapsed: false
+smooth_scroll: true
+editor: source
+editor_options: 
+  chunk_output_type: console
+execute:
+  echo: true
+---
+
+In this document, we will visualize a comparison between 10xFlex hESCs datasets & STAMP across same timepoints. The data come from same cultures.
+
+The inputs will be sce objects quality controlled. A second quick QC will also be performed here, to align with the QC performed for the Palantir analysis.
+## Libraries
+
+```{r}
+suppressPackageStartupMessages({
+library(SingleCellExperiment)
+library(tidySingleCellExperiment)
+library(dplyr)
+library(here)
+library(glue)
+library(qs)
+library(scuttle)
+library(scater)
+library(patchwork)
+library(scDblFinder)
+library(scran)
+library(BiocSingular)
+library(PCAtools)
+})
+```
+
+```{r}
+source(glue("{here()}/scripts/misc/BIN.R")) # bin
+source(glue("{here()}/scripts/misc/paths.R")) # paths
+# stamp data
+stamp <-  qread(glue("{proj_dir}/data/stamp_7b/iESC/qc_sce.qs")) 
+
+# flex datasets
+flex_dir <- list.dirs(glue("{proj_dir}/data/stamp_7b/processed/flex"), recursive = F) # get dirs
+flex_ll <- lapply(flex_dir, \(d) qread(file.path(d, glue("qc_flex_{basename(d)}.qs")))) # read sce
+names(flex_ll) <- basename(flex_dir) # name the list
+flex <- Reduce(cbind,flex_ll) # merge in a single sce
+```
+
+```{r}
+### CORR SPLIT BY time point
+# Take matrices
+c <- stamp
+f <- flex
+cs <- as(counts(c),"dgCMatrix")
+fl <- as(counts(f), "dgCMatrix")
+
+feat <- intersect(rownames(cs),rownames(fl)) # take features intersection
+fl <- fl[feat, ] # subset 
+cs <- cs[feat,] # subset
+
+# Aggregate the flex  matrix
+df <- as.data.frame(colData(f))
+colnames(fl) <- df[colnames(fl), "sample"]
+#fl <- t(rowsum(t(fl), group = colnames(fl)))
+fl <- as(fl, "dgCMatrix")
+# Aggregate the cosmx matrix
+df <- as.data.frame(colData(c))
+colnames(cs) <- df[colnames(cs), "sample"]
+#cs <- t(rowsum(t(cs), group = colnames(cs)))
+cs <- as(cs, "dgCMatrix")
+
+
+# function to aggregate and normalize
+aggr_norm <- function(mat){
+  res <- do.call(cbind, lapply(unique(colnames(mat)), function(col_name) {
+    sub <- mat[, colnames(mat) %in% col_name, drop = FALSE]
+    agg <- rowSums(sub) / ncol(sub)
+    agg
+  }))
+  colnames(res) <- unique(colnames(mat))
+  return(res)
+}
+
+agg_fl <- as.data.frame(aggr_norm(fl))
+agg_fl$gene <- rownames(agg_fl)
+agg_cs <- as.data.frame(aggr_norm(cs))
+agg_cs$gene <- rownames(agg_cs)
+
+
+library(reshape2)
+agg_cs <- melt(agg_cs, id.vars = "gene")
+names(agg_cs)[names(agg_cs) == "value"] <- "STAMP"
+
+agg_fl <- melt(agg_fl, id.vars = "gene")
+names(agg_fl)[names(agg_fl) == "value"] <- "flex"
+
+
+df <- merge(agg_cs, agg_fl, by = c("gene", "variable"), all = TRUE)
+```
+
+```{r}
+corr_plot <- function(df, subset) {
+  
+  genes_ <- c("FGF2","POU5F1","WNT3","KDR")
+  genes_meso <- c("GATA3","KRT19","FOXF1","BMP4","IGFBP7","TTN","EOMES")
+  genes_ecto <- c("SNAI1","DLL1","SOX2","NRG1")
+
+  # Select the appropriate marker genes based on the subset
+  if (subset == "iPSC_parental") { feat_color <- genes_iPSCs }
+  if (subset == "mesoderm") { feat_color <- genes_meso }
+  if (subset == "ectoderm") { feat_color <- genes_ecto }
+  feat_color <- c("SOX2","NANOG","POU5F1","BMP7","GATA3","EOMES","KDR",
+                  "SNAI2","PDGFRA","FOXF1","SNAI1","CXCR4","APOA1","KRT7","TGFBI")
+  # Filter the data for the specific subset
+  sub <- df[df$variable == subset, ]
+  # Create a new variable to indicate if a gene is a marker
+  sub$Is_Marker <- ifelse(sub$gene %in% feat_color, "Yes", "No")
+  
+  # Separate the data into marker and non-marker genes
+  sub_no <- sub[sub$Is_Marker == "No", ]
+  sub_yes <- sub[sub$Is_Marker == "Yes", ]
+  
+  # Plot
+  plt <- ggplot(sub, aes(x = flex, y = STAMP)) +
+    # Plot non-marker genes first
+    ggrastr::rasterise(
+      geom_point(
+        data = sub_no, 
+        aes(color = Is_Marker),
+        shape = 16, 
+        size = 2, 
+        alpha = 0.8
+      ), 
+      dpi = 800
+    ) +
+    # Add correlation coefficient
+    ggpubr::stat_cor(
+      method = "spearman", 
+      label.x.npc = "left", 
+      label.y.npc = "top", 
+      size = 3
+    ) + 
+    # Plot marker genes on top
+    geom_point(
+      data = sub_yes, 
+      aes(color = Is_Marker), 
+      shape = 16, 
+      size = 2, 
+      alpha = 0.8
+    ) +
+    # Add gene labels for marker genes with black text
+    ggrepel::geom_text_repel(
+      data = sub_yes, 
+      aes(label = gene),
+      size = 3, 
+      color = "black",  # Changed from "red" to "black"
+      max.overlaps = Inf
+    ) +
+    scale_y_log10() +
+    scale_x_log10() +
+    geom_abline(
+      slope = 1, 
+      intercept = 0, 
+      color = "red4", 
+      linetype = "dashed"
+    ) +
+    labs(
+      title = subset, 
+      color = "Is Marker",
+      x = "Mean counts/gene - Flex", 
+      y = "Mean counts/gene - STAMP"
+    ) +
+    theme_bw() +
+    theme(
+      text = element_text(size = 14, color = "black"), 
+    #  plot.title = element_text(size = 14, color = "black"),
+      axis.text = element_text(size = 10, color = "black"),
+      axis.title = element_text(size = 12, color = "black"),
+      panel.grid = element_blank(),
+      legend.position = "none"  # Remove legend for combining later
+    ) +
+    scale_color_manual(values = c("Yes" = "red", "No" = "grey"))
+  
+ if(subset == "iPSC_parental") {plt <- plt + scale_y_log10(limits = c(0.01,100), breaks = c(0.01,1,100))}
+if(subset == "ectoderm" | subset == "mesoderm") {plt <- plt + scale_y_log10(limits = c(0.1,10), breaks = c(0.1,1,10))}
+  
+  return(plt)
+}
+
+samples <- factor(unique(),levels = c("iESC_0h","iESC_6h","iESC_12h","iESC_24h","iESC_48h","iESC_72h",
+                                     "iESC_96h","iESC_120h"))
+samples <- c("iESC_0h","iESC_6h","iESC_12h","iESC_24h","iESC_48h","iESC_72h",
+                                     "iESC_96h","iESC_120h")
+
+corr_plt <- lapply(samples,\(.){
+  corr_plot(df,.) + theme(aspect.ratio = 1/1)
+})
+corr_plt <- wrap_plots(corr_plt)
+
+
+pdf(glue("{proj_dir}/plots/revision/iESCs_comparison.pdf"), width = 10, height = 10)
+corr_plt
+dev.off()
+```
+
+
+
+
+
+
+
+
+
+

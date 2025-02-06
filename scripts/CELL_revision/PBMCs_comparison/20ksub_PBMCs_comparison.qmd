@@ -19,7 +19,7 @@ execute:
   echo: true
 ---
 
-In this script, we will compare basic quality metrics in main PBMCs populations (CD4,CD8,Myeloid,NK,B) across different technologies (STAMP,10xFlex,10x5', 10x3')
+In this script, we will compare basic quality metrics in main PBMCs populations (CD4,CD8,Myeloid,NK,B) across different technologies (STAMP,10xFlex,10x5', 10x3'). To ensure a fair comparison, we will be compari
 
 ## Libraries
 ```{r}
@@ -60,7 +60,6 @@ stamp_cd4_cd8 <- qread(glue("{proj_dir}/data/stamp_11/PBMCs/processed/T/lvl1_sce
 ```{r}
 stamp_cd4_cd8$lvl1 <- stamp_cd4_cd8$lvl2
 colData(stamp_cd4_cd8) <- colData(stamp_cd4_cd8)[c("lvl1","sum","detected")]
-
 stamp_lvl1 <- stamp_lvl1[,! stamp_lvl1$lvl1 %in%  c("T","LowQ")]
 colData(stamp_lvl1) <- colData(stamp_lvl1)[c("lvl1","sum","detected")]
 
@@ -68,16 +67,50 @@ stamp <- cbind(stamp_lvl1,stamp_cd4_cd8)
 stamp$tech <- "STAMP"
 stamp$panel_size <- nrow(stamp)
 altExps(stamp) <- NULL
+#stamp <- stamp[,sample(colnames(stamp),6)] # keep only 10k cells
+stamp
+```
+
+## Function to randomly sample n cells keeping proportions
+```{r}
+subset_lvl1 <- \(sce,n_total = 10000){
+  
+# Get proportions of each lvl1 category
+lvl1_counts <- table(sce$lvl1)
+lvl1_props <- lvl1_counts / sum(lvl1_counts)
+
+# Compute number of samples to take from each category
+lvl1_sample_sizes <- round(lvl1_props * n_total)
+
+# Sample while maintaining proportions
+set.seed(123)  # For reproducibility
+sampled_cells <- unlist(lapply(names(lvl1_sample_sizes), function(x) {
+  sample(which(sce$lvl1 == x), lvl1_sample_sizes[x])
+}))
+
+# Subset the SCE object
+sce <- sce[, sampled_cells]
+return(sce)
+}
+
+tst <- subset_lvl1(ten_five,6000)
+
+# subset the objects
+stamp <- subset_lvl1(stamp,6000)
+ten_five <- subset_lvl1(ten_five,6000)
+ten_three <- subset_lvl1(ten_three,6000)
+flex <- subset_lvl1(flex,6000)
 ```
 
 # Merge the 10x datasets
 ```{r}
 ten <- mget(c("flex", "ten_five", "ten_three")) # named sce list
-ten <- lapply(ten,\(.){.[,.$scDblFinder.class != "doublet"]})
+ten <- lapply(ten,\(.){.[,.$scDblFinder.class != "doublet"]}) # filter out doublets
+
 ten <- lapply(ten, \(.){colData(.) <- colData(.)[c("lvl1","sum","detected")];.}) # keep col of interest  
 ten <- lapply(names(ten), \(.) {colData(ten[[.]])[["tech"]] <- .;ten[[.]]}) # add tech info
 ten <- lapply(ten, \(.) {rowData(.) <- NULL;.}) # remove rowData 
-ten <- lapply(ten, \(.) {.$panel_size <- sum(!grepl("^ENSG0", rownames(.)));.}) # add panel size removing not named genes
+ten <- lapply(ten, \(.) {.$panel_size <- nrow(.);.}) # add panel size removing not named genes
 
 ft <- Reduce(intersect, lapply(ten, rownames))
 ten <- lapply(ten,\(.)(.[ft,]))
@@ -92,6 +125,7 @@ tenx
 # Quality metrics
 ```{r}
 full <- c(ten,list(stamp))
+#full <- lapply(full,\(.)(addPerCellQCMetrics(.)))
 cd <- do.call(rbind, lapply(full, \(.) as.data.frame(colData(.))))
 cd$detected_pct <- round(cd$detected / cd$panel_size,4)
 
@@ -108,10 +142,8 @@ names(pal) <- levels(cd$tech)
 plt <- \(var, ylab){
   
 #cd$tech <- factor(cd$tech, levels = names(sort(tapply(cd[[var]], cd$tech, median))))
-
 ggplot(cd, aes(x = tech, y = !!sym(var), color = tech)) +
   ggrastr::rasterise(geom_boxplot(outlier.size = 0.1),dpi = 1200) +
-  scale_y_log10() +
   scale_color_manual(values = pal) +
   theme_bw(base_size = 16) +
   labs(color ="Tech", x= "", y = ylab) + 
@@ -122,19 +154,21 @@ ggplot(cd, aes(x = tech, y = !!sym(var), color = tech)) +
 }
 
 p1 <- wrap_plots(
-  plt("detected_pct","nFeatures / Panel size") + theme(aspect.ratio = 1/1),
-  plt("detected","nFeatures") + theme(aspect.ratio = 1/1),
-  plt("sum","nCounts")+ theme(aspect.ratio = 1/1),
+  plt("detected_pct","nFeatures / Total nFeatures") + theme(aspect.ratio = 1/1) + coord_cartesian(ylim = c(0,0.2)),
+  plt("detected","nFeatures") + theme(aspect.ratio = 1/1) + scale_y_log10(),
+  plt("sum","nCounts")+ theme(aspect.ratio = 1/1) + scale_y_log10(),
   ncol = 1) +
   plot_layout(axis_titles = "collect", guides = "collect")
 
-p1 
+p1
+```
 
-pdf(glue("{proj_dir}/plots/revision/PBMCs_comparison_1.pdf"), width = 10, height = 8)
+
+```{r}
+pdf(glue("{proj_dir}/plots/revision/20k_PBMCs_comparison_1.pdf"), width = 10, height = 8)
 p1
 dev.off()
 ```
-
 
 # QC on intersection
 To ensure a more fair comparison, we will calculate such metrics only on the intersection of the panels
@@ -154,20 +188,19 @@ cd$tech[cd$tech == "ten_three"] <- "10X3"
 cd$tech[cd$tech == "flex"] <- "Flex"
 
 cd <- cd[cd$lvl1 %in% c("CD4","CD8","B","NK","Myeloid"),]
+
 cd$tech <- factor(cd$tech, levels = c("10X5","10X3","Flex","STAMP"))
 
 p2 <- wrap_plots(
-  plt("sum","nCounts") + theme(aspect.ratio = 1/1),
-  plt("detected","nFeatures")+ theme(aspect.ratio = 1/1),
+  plt("sum","nCounts") + theme(aspect.ratio = 1/1) + scale_y_log10() + coord_cartesian(ylim = c(100,3000)),
+  plt("detected","nFeatures")+ theme(aspect.ratio = 1/1)  + scale_y_log10() + coord_cartesian(ylim = c(100,1500)),
   ncol = 1) +
   plot_layout(axis_titles = "collect", guides = "collect")
 
-pdf(glue("{proj_dir}/plots/revision/PBMCs_comparison_2.pdf"), width = 10, height = 4)
+pdf(glue("{proj_dir}/plots/revision/20k_PBMCs_comparison_2.pdf"), width = 10, height = 4)
 p2
 dev.off()
 ```
-
-
 
 # Lineage-defying markers and Transcription factors
 ```{r}
@@ -196,21 +229,12 @@ cd$tech[cd$tech == "flex"] <- "Flex"
 
 cd <- cd[cd$lvl1 %in% c("CD4","CD8","B","NK","Myeloid"),]
 cd$tech <- factor(cd$tech, levels = c("10X5","10X3","Flex","STAMP"))
-
-wrap_plots(
-  plt("sum","nCounts") + theme(aspect.ratio = 1/1),
-  plt("detected","nFeatures")+ theme(aspect.ratio = 1/1),
-  ncol = 1) +
-  plot_layout(axis_titles = "collect", guides = "collect")
 ```
-
-
 
 ```{r}
 sub <- lapply(sub,\(.)(.[,.$lvl1 %in% c("CD4","CD8","B","NK","Myeloid")]))
 sub <- lapply(sub,\(.){.$tech_ctype <- paste0(.$tech,"_",.$lvl1);.})
 
-sub <- lapply(sub,\(.)(.[,sample(colnames(.),7000)])) # take 7k random cells to make it more fair
 # Take matrix
 cs <- lapply(sub,\(.){
   cs <- as(counts(.),"dgCMatrix")
@@ -263,11 +287,7 @@ p3 <- wrap_plots(
   nrow = 4) + 
   plot_layout(guides = "collect",axis_titles = "collect", height = c(2,2,2,2))
 
-pdf(glue("{proj_dir}/plots/revision/PBMCs_comparison_3.pdf"), width = 8, height = 12)
+pdf(glue("{proj_dir}/plots/revision/20k_PBMCs_comparison_3.pdf"), width = 8, height = 12)
 p3
 dev.off()
 ```
-
-
-
-

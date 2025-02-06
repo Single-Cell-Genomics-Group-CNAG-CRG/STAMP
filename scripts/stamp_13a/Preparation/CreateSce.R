@@ -16,23 +16,23 @@ stamp <- "stamp_13a"
 
 # # loading
  dir <- glue("{proj_dir}/data/{stamp}/raw/STAMPC_90K")
- f <- \(.) file.path(dir, paste0("STAMPC_90K_", .))
+f <- \(.) file.path(dir, paste0("STAMPC_90K_", .))
 
 y <- readSparseCSV(f("exprMat_file.csv.gz"), transpose=TRUE)
 cd <- read.csv(f("metadata_file.csv.gz"))
 
 # coercion
- y <- as(y[-1, ], "dgCMatrix")
- colnames(y) <- cd$cell
+y <- as(y[-1, ], "dgCMatrix")
+colnames(y) <- cd$cell
  
- gs <- rownames(y)
- np <- grep("Negative", gs)
- fc <- grep("SystemControl", gs)
+gs <- rownames(y)
+np <- grep("Negative", gs)
+fc <- grep("SystemControl", gs)
  
- as <- list(counts=y[-c(np, fc), ])
- ae <- list(
-     negprobes=SingleCellExperiment(list(counts=y[np, ])),
-     falsecode=SingleCellExperiment(list(counts=y[fc, ])))
+as <- list(counts=y[-c(np, fc), ])
+ae <- list(
+  negprobes=SingleCellExperiment(list(counts=y[np, ])),
+  falsecode=SingleCellExperiment(list(counts=y[fc, ])))
 # 
 sce <- SingleCellExperiment(as, colData=cd, altExps=ae)
 

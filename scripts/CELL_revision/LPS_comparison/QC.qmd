@@ -1,5 +1,5 @@
 ---
-title: "Quality Control - Flex PBMCs"
+title: "Quality Control - LPS"
 subtitle: "Emanuele Pitino"
 date: "`r Sys.Date()`"
 format: 
@@ -18,7 +18,6 @@ editor_options:
 execute:
   echo: true
 ---
-This dataset contains Flex scRNA-seq data from healthy PBMCs. The dataset was downloaded from the 10X genomics website at the following [link](https://www.10xgenomics.com/datasets/320k_Human_PBMCs_Sub_Pool_16-plex_GEM-X_FLEX). To ensure a fair comparison with other 10x datasets and STAMP, the dataset has been downsampled as for 10X recommendations for Flex (10K reads/cell). We have also sampled 10K cells out of the original whole dataset.
 
 ## Libraries
 ```{r}
@@ -40,10 +39,15 @@ library(patchwork)
 ```{r}
 source(glue("{here()}/scripts/misc/BIN.R")) # bin
 source(glue("{here()}/scripts/misc/paths.R")) # bin
-sce <- qread(glue("{proj_dir}/data/flex_pbmcs/raw/raw_sce.qs"))
-sce
 
-sce$Sample <- "flex_PBMCs"
+mtx <- readRDS(glue("{proj_dir}/data/lps_pbmcs/raw/CZI.PBMC.RNA.matrix.Rds"))
+adt <- readRDS(glue("{proj_dir}/data/lps_pbmcs/raw/CZI.PBMC.ADT.matrix.Rds"))
+
+bcd <- data.table::fread(glue("{proj_dir}/data/lps_pbmcs/raw/CZI.PBMC.cell.annotations.csv"), header = T)
+
+sce <- SingleCellExperiment(assays = list(counts = mtx), colData = DataFrame(bcd))
+sce
+sce$Sample <- "LPS"
 ```
 
 # Add quality metrics
@@ -58,20 +62,17 @@ sce <- addPerCellQCMetrics(sce, subsets=list(mito=mito))
 discard_sum <- isOutlier(sce$sum, 
                          type = "lower", 
                          log = TRUE,
-                         nmads = 2.5,
-                         batch = sce$Sample)
+                         nmads = 2.5)
 # Detected outliers
 discard_detected <- isOutlier(sce$detected, 
                          type = "lower", 
                          log = TRUE,
-                         nmads = 2.5,
-                         batch = sce$Sample)
+                         nmads = 2.5)
 # Detected outliers
 discard_mito <- isOutlier(sce$subsets_mito_percent, 
                          type = "higher", 
                          log = F,
-                         nmads = 3.5,
-                         batch = sce$Sample)
+                         nmads = 3.5)
 
 # Add to sce obj
 discard_vars <- c("discard_sum", "discard_detected", "discard_mito")
@@ -103,7 +104,7 @@ plot_qcmet <- \(qcvar){
 }
 ```
 
-```{r, fig.width = 4, fig.height= 7}
+```{r, fig.width = 5, fig.height= 4}
  wrap_plots(
             plot_qcmet("sum") + theme(axis.text.x = element_blank(),
                                       axis.title.x = element_blank(),
@@ -128,6 +129,6 @@ sce <- sce[,sce$discard_sum == FALSE & sce$discard_detected == FALSE & sce$disca
 
 
 ```{r}
-dir.create(glue("{proj_dir}/data/flex_pbmcs/QC"), showWarnings = F)
-qsave(sce, file = glue("{proj_dir}/data/flex_pbmcs/QC/QC1.qs"), nthreads = 8)
+dir.create(glue("{proj_dir}/data/LPS_pbmcs/QC"), recursive = T, showWarnings = F)
+qsave(sce, file = glue("{proj_dir}/data/LPS_pbmcs/QC/QC1.qs"), nthreads = 8)
 ```

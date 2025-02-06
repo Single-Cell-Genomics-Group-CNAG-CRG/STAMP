@@ -51,10 +51,11 @@ act_mono_lps_ctrl_4h <- EnhancedVolcano(res,
                 y = 'pvalue',
                 FCcutoff = 0.25,
                 pCutoff = 0.05,
+                pCutoffCol = 'padj',
                 title = "LPS vs Ctrl - 4h",
                 subtitle = glue("subset: {unique(sub$lvl1)}"),
-            #    selectLab = c('CXCL8','CCL5','INSIG1',
-            #                   'CCL3/L1/L3','ITGB8','G0S2','INHBA','PTGS2','IL6',"STAT4"),
+                selectLab = c('CXCL8','CCL5','CSF3',
+                               'CCL3/L1/L3','G0S2','PTGS2','IL6','IL1B','CDKN1A'),
                 boxedLabels = TRUE,
                 colAlpha = 1,
                 legendPosition = 'none',
@@ -90,6 +91,7 @@ act_mono_4h_24h_lps <- EnhancedVolcano(res,
                 x = 'log2FoldChange',
                 y = 'pvalue',
                 pCutoff = 0.05,
+                pCutoffCol = 'padj',
                 FCcutoff = 0.25,
                 title = "24h vs 4h - LPS",
                 subtitle = glue("subset: {unique(sub$lvl1)}"),
@@ -105,6 +107,7 @@ act_mono_4h_24h_lps <- EnhancedVolcano(res,
                 xlab = bquote(~Log[2]~ 'fold change'),
                 xlim = c(-1,1),
                 ylim = c(0,5)) 
+act_mono_4h_24h_lps
 ####################################################################################
 # 3. Classical monocytes : ctrl vs lps at 4h
 ####################################################################################
@@ -127,10 +130,11 @@ class_mono_lps_ctrl_4h <- EnhancedVolcano(res,
                 y = 'pvalue',
                 pCutoff = 0.05,
                 FCcutoff = 0.10,
+                pCutoffCol = 'padj',
                 title = "LPS vs Ctrl - 4h",
                 subtitle = glue("subset: {unique(sub$lvl1)}"),
-                #    selectLab = c('CXCL8','CCL5','INSIG1',
-                #                   'CCL3/L1/L3','ITGB8','G0S2','INHBA','PTGS2','IL6',"STAT4"),
+                    selectLab = c('CXCL8','CCL5','INSIG1',
+                                   'CCL3/L1/L3','ITGB8','G0S2','INHBA','PTGS2','IL6',"STAT4"),
                 boxedLabels = TRUE,
                 colAlpha = 1,
                 legendPosition = 'right',
@@ -185,8 +189,11 @@ class_mono_4h_24h_lps <- EnhancedVolcano(res,
 class_mono_4h_24h_lps
 
 ####################################################################################
-pdf("/Users/emanuelepitino/Desktop/stamp_13a/volcanos.pdf", width = 8, height = 10)
+pdf("/Users/emanuelepitino/Desktop/stamp_13a/volcanos.pdf", width = 5, height = 10)
 wrap_plots(act_mono_lps_ctrl_4h,act_mono_4h_24h_lps, ncol = 1) + 
-  plot_layout(guides = "collect")
+  plot_layout(guides = "collect") &
+  theme_bw(18) &
+  theme(panel.grid = element_blank(), legend.position = "none") & 
+  scale_color_manual(values = c("#cccccc","#77dd77","#ff6961"))
 dev.off()
 

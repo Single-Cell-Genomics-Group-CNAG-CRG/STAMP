@@ -160,22 +160,25 @@ ggplot(df, aes(x = Var1, y = pct, fill = Var2)) +
 ```{r}
 sce$label <- as.numeric(sce$label)
 sce$lvl1[sce$label == "1"] <- "Myeloid"
-sce$lvl1[sce$label == "2"] <- "CD4"
-sce$lvl1[sce$label == "3"] <- "CD4"
-sce$lvl1[sce$label == "4"] <- "B"
-sce$lvl1[sce$label == "5"] <- "Myeloid"
+sce$lvl1[sce$label == "2"] <- "Myeloid"
+sce$lvl1[sce$label == "3"] <- "Myeloid"
+sce$lvl1[sce$label == "4"] <- "Myeloid"
+sce$lvl1[sce$label == "5"] <- "CD8"
 sce$lvl1[sce$label == "6"] <- "NK"
-sce$lvl1[sce$label == "7"] <- "CD8"
-sce$lvl1[sce$label == "8"] <- "Myeloid"
+sce$lvl1[sce$label == "7"] <- "CD4"
+sce$lvl1[sce$label == "8"] <- "CD4"
 sce$lvl1[sce$label == "9"] <- "Doublets"
-sce$lvl1[sce$label == "10"] <- "Myeloid"
-sce$lvl1[sce$label == "11"] <- "lowq"
-sce$lvl1[sce$label == "12"] <- "NK"
+sce$lvl1[sce$label == "10"] <- "B"
+sce$lvl1[sce$label == "11"] <- "Myeloid"
+sce$lvl1[sce$label == "12"] <- "Doublets"
 sce$lvl1[sce$label == "13"] <- "Doublets"
+sce$lvl1[sce$label == "14"] <- "CD8"
+sce$lvl1[sce$label == "15"] <- "CD8"
+sce$lvl1[sce$label == "16"] <- "Doublets"
+
 ```
 
 # Proportion of lvl1
-Overall, proportions look in line with what would be expected in PBMCs, with ~65% T cells, ~25% Myeloid cells, and ~5% B cells.
 ```{r}
 df <- as.data.frame(table(sce$lvl1)) %>%
   mutate(pct = Freq / sum(Freq))
@@ -193,6 +196,24 @@ ggplot(df, aes(x = "",y = pct, fill = Var1)) +
   guides(fill = guide_legend(ncol = 5, reverse = T)) +
   labs(x = "", y = "Fraction", fill = "Lvl1")
 ```
+
+```{r}
+sce$label <- as.character(sce$label)
+gg <- wrap_plots(
+  plotReducedDim(sce,"UMAP",scattermore = T, color_by = "lvl1", text_by = "lvl1", point_size = 1) + scale_color_manual(values = palette_general()) +
+    theme(aspect.ratio = 1/1),
+  plotDots(sce, features = c("CD79A","CD79B","CD4","CD3E","CD8A","CD14","FCGR3A","NKG7","NCAM1"),group = "lvl1", scale = T, center = T) +
+  coord_flip() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        aspect.ratio = 1/4),
+  ncol = 2)
+```
+
+
+```{r, fig.width=15,fig.height=8}
+gg
+```
+
 
 ```{r}
 dir.create(glue("{proj_dir}/data/flex_pbmcs/Lvl1"))

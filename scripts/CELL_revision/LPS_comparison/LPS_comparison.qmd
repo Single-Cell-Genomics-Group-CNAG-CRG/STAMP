@@ -1,0 +1,336 @@
+---
+title: "LPS stimulation comparison across 10x & STAMP"
+subtitle: "Emanuele Pitino"
+date: "`r Sys.Date()`"
+format: 
+  html:
+    theme: superhero
+    smooth-scroll: true
+    code-fold: true
+    self-contained: true
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+editor: source
+editor_options: 
+  chunk_output_type: console
+execute:
+  echo: true
+---
+
+In this script, we will compare DEGs in LPS activated PBMCs in Stamp & a scRNAseq study. The link for the publication can be accessed [here](https://www.frontiersin.org/journals/immunology/articles/10.3389/fimmu.2021.636720/full), while the data was downloaded from the HCA data platform at the following [link](https://explore.data.humancellatlas.org/projects/efea6426-510a-4b60-9a19-277e52bfa815)
+
+```{r}
+# Libraries
+suppressPackageStartupMessages({
+  library(SingleCellExperiment)
+  library(dplyr)
+  library(here)
+  library(scater)
+  library(glue)
+  library(qs)
+  library(BiocParallel)
+  library(BiocNeighbors)
+  library(BiocSingular)
+  library(data.table)
+  library(spatstat)
+  library(InSituType)
+  library(EnhancedVolcano)
+  library(DESeq2)
+})
+```
+
+
+```{r}
+# Data loading
+dir <- glue("{here()}")
+source(glue("{dir}/scripts/misc/paths.R"))
+source(glue("{dir}/scripts/misc/BIN.R"))
+
+stamp <- "stamp_13a"
+res_dir <- glue("{proj_dir}/data/{stamp}/processed")
+sce <- qread(glue("{res_dir}/anno_sce_P1.qs"), nthreads = 8)
+```
+
+The list of differentially expressed genes comes from a DEA in monocytes vs control at 24h. So, we will replicate this analysis in our STAMP dataset and compare.
+
+```{r}
+sce$id <- paste0(sce$lvl1,"_",sce$replicate,"_",sce$timepoint,"_",sce$experiment)
+
+sce$lvl0[sce$lvl1 %in% c("act. mono.","class. mono.","inflamm. mono.")] <- "Monocytes"
+
+sub <- sce[,sce$lvl0 == "Monocytes"] # keep monocytes
+sub <- sub[,sub$experiment != "aCD3aCD28"] # only LPS vs CTRL
+sub <- sub[,sub$timepoint == "24h"] # only 24h
+```
+
+```{r}
+library(scran)
+sub$experiment <- as.character(sub$experiment)
+mrk <- findMarkers(sub, test.type="wilcox", groups=sub$experiment, BPPARAM=bp)
+
+a <- mrk[[2]]
+a <- a[order(a$summary.AUC, decreasing = TRUE), ]
+
+mrk_ord <- lapply(mrk, \(.)(.[order(.$mean.logFC.cohen, decreasing=TRUE),])) # order by logFC
+mrk_ord <- lapply(mrk_ord,\(.){.$gene <- rownames(.); .})
+mrk_ord <- lapply(mrk_ord,\(.)(.[1:100,])) # take top  markers by logFC
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+####################################################################################
+# 1. Activated monocytes : ctrl vs lps at 4h
+####################################################################################
+sce$id <- paste0(sce$lvl1,"_",sce$replicate,"_",sce$timepoint,"_",sce$experiment)
+
+agg <- aggregateAcrossCells(sce, ids = sce$id, use.assay.type = "counts", statistics = "sum")
+
+sizeFactors(agg) <- NULL
+
+sub <- agg[,agg$lvl1 == "act. mono." & agg$experiment != "aCD3aCD28" & agg$timepoint == "4h"] # sub
+
+# Create obj
+dds <- DESeqDataSetFromMatrix(countData = counts(sub), # take matrix
+                              colData = colData(sub), # take coldata
+                              design= ~ experiment) # indicate replicates and exp columns
+
+dds <- DESeq(dds, BPPARAM = bp)
+resultsNames(dds) # lists the coefficients
+res <- results(dds, name="experiment_LPS_vs_ctrl")
+# Shrink log fold changes association with condition: only when few cells
+#res <- lfcShrink(dds, coef="experiment_LPS_vs_ctrl", type="apeglm")
+act_mono_lps_ctrl_4h <- EnhancedVolcano(res,
+                lab = rownames(res),
+                x = 'log2FoldChange',
+                y = 'pvalue',
+                FCcutoff = 0.25,
+                pCutoff = 0.05,
+                pCutoffCol = 'padj',
+                title = "LPS vs Ctrl - 4h",
+                subtitle = glue("subset: {unique(sub$lvl1)}"),
+            #    selectLab = c('CXCL8','CCL5','INSIG1',
+            #                   'CCL3/L1/L3','ITGB8','G0S2','INHBA','PTGS2','IL6',"STAT4"),
+                boxedLabels = TRUE,
+                colAlpha = 1,
+                legendPosition = 'none',
+                legendLabSize = 14,
+                legendIconSize = 4.0,
+                drawConnectors = TRUE,
+                widthConnectors = 0.5,
+                colConnectors = 'black',
+                labSize = 3,
+                xlab = bquote(~Log[2]~ 'fold change'),
+                xlim = c(-1,1),
+                ylim = c(0,15)) 
+act_mono_lps_ctrl_4h
+```
+
+# Get DEGs in the scRNAseq and Stamp experiments
+```{r}
+deg_sc <- readxl::read_xlsx(glue("{proj_dir}/Markers/LPS_PBMCs_sc/Table5.xlsx"), sheet = 2)
+deg_sc$gene <- deg_sc$...1
+deg_sc <- deg_sc[!grepl("^CITE-", deg_sc$gene), ]
+
+deg_sc <- unique(deg_sc$gene[abs(deg_sc$avg_logFC) > 0.25 & deg_sc$p_val_adj < 0.05])
+
+deg_stamp <- unique(df_res$gene[abs(df_res$log2FoldChange) > 0.25 & df_res$padj < 0.05])
+deg_stamp <- deg_stamp[!is.na(deg_stamp)]  # Remove NAs
+```
+
+```{r}
+length(deg_sc)
+length(deg_stamp)
+```
+
+# Align gene names
+By reading the methods, we can see that the single cell data from this study had been mapped to the human genome GrCh37. So, we will need to align with the STAMP data using ensembl gene ids
+```{r}
+library(biomaRt)
+# Connect to Ensembl database
+mart_grch37 <- useMart("ENSEMBL_MART_ENSEMBL", 
+                dataset = "hsapiens_gene_ensembl", 
+                host = "grch37.ensembl.org")  # Explicitly use GRCh37
+
+
+genes_sc <- getBM(
+  attributes = c("hgnc_symbol", "ensembl_gene_id"),
+  filters = "hgnc_symbol",
+  values = deg_sc,
+  mart = mart_grch37
+)
+```
+
+Add ensembl ids for stamp
+```{r}
+mart <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+genes_stamp <- getBM(
+  attributes = c("hgnc_symbol", "ensembl_gene_id"),
+  filters = "hgnc_symbol",
+  values = deg_stamp,
+  mart = mart
+)
+```
+
+```{r}
+genes_stamp$shared <- "no"
+genes_stamp$shared[genes_stamp$ensembl_gene_id %in% genes_sc$ensembl_gene_id] <- "yes"
+```
+
+```{r}
+library(ggplot2)
+
+# Convert to dataframe for plotting
+df_pie <- data.frame(
+  Category = genes_stamp$shared
+)
+
+# Define category labels
+df_pie$Category <- factor(df_pie$Category, levels = c("no", "yes"), 
+                          labels = c("STAMP only", "STAMP & scRNAseq"))
+
+# Count occurrences
+df_pie_summary <- as.data.frame(table(df_pie$Category))
+colnames(df_pie_summary) <- c("Category", "Count")
+
+# Calculate percentages
+df_pie_summary$Percentage <- round(100 * df_pie_summary$Count / sum(df_pie_summary$Count), 1)
+df_pie_summary$Label <- paste0("N= ", df_pie_summary$Count, " (", df_pie_summary$Percentage, "%)")
+
+# Extract genes for caption where shared == "yes"
+genes_caption <- paste(genes_stamp$hgnc_symbol[genes_stamp$shared == "yes"], collapse = ", ")
+
+# Create pie chart with labels inside
+pie <- ggplot(df_pie_summary, aes(x = "", y = Count, fill = Category)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +
+  theme_void() +  # Removes background and axes
+  scale_fill_manual(name = "DEG", values = c("#FF6347", "#4682B4")) +  # Custom colors
+  labs(caption = paste("STAMP & scRNAseq: ", genes_caption)) +  # Add caption
+  geom_text(aes(label = Label), position = position_stack(vjust = 0.8), size = 3, color = "white")  # Labels inside
+```
+
+```{r}
+library(ggplot2)
+
+# Convert to dataframe for plotting
+df_pie <- data.frame(
+  Category = genes_stamp$shared
+)
+
+# Define category labels
+df_pie$Category <- factor(df_pie$Category, levels = c("no", "yes"), 
+                          labels = c("STAMP only", "STAMP & scRNAseq*"))
+
+# Count occurrences
+df_pie_summary <- as.data.frame(table(df_pie$Category))
+colnames(df_pie_summary) <- c("Category", "Count")
+
+# Calculate percentages
+df_pie_summary$Percentage <- round(100 * df_pie_summary$Count / sum(df_pie_summary$Count), 1)
+df_pie_summary$Label <- paste0("n = ", df_pie_summary$Count, " (", df_pie_summary$Percentage, "%)")
+
+# Extract genes for caption where shared == "yes"
+genes_list <- genes_stamp$hgnc_symbol[genes_stamp$shared == "yes"]
+genes_caption <- paste(genes_list, collapse = ", ")
+
+# Split caption into two lines if it's too long
+if (nchar(genes_caption) > 40) {  # Adjust this threshold as needed
+  split_point <- floor(nchar(genes_caption) / 2)
+  space_pos <- regexpr(", ", substr(genes_caption, split_point, split_point + 20)) + split_point - 1
+  genes_caption <- paste0(substr(genes_caption, 1, space_pos), "\n", substr(genes_caption, space_pos + 2, nchar(genes_caption)))
+}
+
+# Create pie chart with labels inside
+gg_pie <- ggplot(df_pie_summary, aes(x = "", y = Count, fill = Category)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +
+  theme_void() +  # Removes background and axes
+  scale_fill_manual(name = "DEG", values = c("#FF6347", "#4682B4")) +  # Custom colors
+  labs(caption = paste0("*",genes_caption,".")) +  # Add caption with forced line break
+  geom_text(aes(label = Label), position = position_stack(vjust = 0.7), size = 4, color = "white")  # Labels inside
+```
+
+```{r}
+pdf(glue("{proj_dir}/plots/revision/PieChart_DEGs_LPS.pdf"))
+gg_pie
+dev.off()
+```
+
+# Whole intersection plot
+Previously, we visualized only the DEGs identified in STAMP, highlighting whether they were also differentially expressed in the scRNAseq dataset. Now, we expand the analysis by displaying the entire sets of DEGs from both datasets.
+```{r}
+venn_list <- list(
+  "scRNAseq" = genes_sc$hgnc_symbol,
+  "STAMP" = genes_stamp$hgnc_symbol
+)
+# Plot Venn diagram
+ggvenn::ggvenn(venn_list)
+```
+
+```{r}
+tst <- left_join(deg_sc,gene_conversion_stamp, by = "ensembl_gene_id")
+```
+
+
+Take intersection of statistically significant DEGs in each dataset
+```{r}
+s_sc <- deg_sc[abs(deg_sc$avg_logFC) > 0.25 & deg_sc$p_val_adj < 0.05,]
+s_stamp <- df_res[abs(df_res$log2FoldChange) > 0.25 & df_res$padj < 0.05,]
+
+df_res <- as.data.frame(res)
+df_res$gene <- rownames(df_res)
+s_sc <- unique(deg_sc$gene[abs(deg_sc$avg_logFC) > 0.25 & deg_sc$p_val_adj < 0.05])
+s_stamp <- unique(df_res$gene[abs(df_res$log2FoldChange) > 0.25 & df_res$padj < 0.05])
+
+venn_list <- list(
+  "scRNAseq" = s_sc,
+  "STAMP" = s_stamp
+)
+
+# Plot Venn diagram
+ggvenn::ggvenn(venn_list)
+```
+
+
+
+
+```{r}
+library(biomaRt)
+# Connect to Ensembl database
+mart <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+
+mart_grch37 <- useMart("ENSEMBL_MART_ENSEMBL", 
+                dataset = "hsapiens_gene_ensembl", 
+                host = "grch37.ensembl.org")  # Explicitly use GRCh37
+
+# List of gene symbols to convert
+genes_stamp <- s_stamp
+genes_sc <- deg_sc$gene[abs(deg_sc$avg_logFC) > 0.25 & deg_sc$p_val_adj < 0.05]
+# Convert to Ensembl Gene IDs
+gene_conversion_stamp <- getBM(
+  attributes = c("hgnc_symbol", "ensembl_gene_id"),
+  filters = "hgnc_symbol",
+  values = genes_stamp,
+  mart = mart
+)
+
+gene_conversion_sc <- getBM(
+  attributes = c("hgnc_symbol", "ensembl_gene_id"),
+  filters = "hgnc_symbol",
+  values = genes_sc,
+  mart = mart_grch37
+)
+
+print(gene_conversion_sc)
+
+ens_sc <- gene_conversion_sc$ensembl_gene_id
+ens_stamp <- gene_conversion_stamp$ensembl_gene_id
+int <- intersect(ens_stamp,ens_sc)
+```

@@ -17,19 +17,16 @@ source(glue("{dir}/misc/paths.R"))
 source(glue("{dir}/misc/BIN.R"))
 
 data_dir <- glue("{proj_dir}/data/flex_PBMCs")
-barcodes <- fread(glue("{data_dir}/filtered_feature_barcode_matrix/A/barcodes.tsv.gz"), sep = "\t", nThread = 3, header = F)
-features <- fread(glue("{data_dir}/filtered_feature_barcode_matrix/A/features.tsv.gz"), sep = "\t", nThread = 3, header = F)
-counts <- Matrix::readMM(glue("{data_dir}/filtered_feature_barcode_matrix/A/matrix.mtx.gz"))
 
-counts <- as(counts, "dgCMatrix")
+sce <- read10xCounts(glue("{data_dir}/raw/sample_filtered_feature_bc_matrix.h5"),
+                     row.names = "symbol",
+                     col.names = T,
+                     delayed = FALSE,
+                     sample.names = "flex")
 
-colnames(counts) <- barcodes$V1
-rownames(counts) <- features$V2
+counts(sce) <- as(counts(sce), "dgCMatrix")
 
-sce <- SingleCellExperiment(assay = list(counts = counts))
-
-
+sce <- sce[,sample(colnames(sce),10000)] # subset to keep 10k cells
 # Save sce object as qs file
-dir.create(glue("{dir}/raw"), showWarnings = F)
-
-qsave(sce,file = glue("{dir}/raw/raw_sce.qs"), nthreads = 8)
+dir.create(glue("{data_dir}/raw"), showWarnings = F)
+qsave(sce,file = glue("{data_dir}/raw/raw_sce.qs"), nthreads = 8)

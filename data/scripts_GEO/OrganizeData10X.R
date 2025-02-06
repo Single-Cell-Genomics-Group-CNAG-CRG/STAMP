@@ -18,10 +18,10 @@ source(glue("{dir}/misc/paths.R"))
 source(glue("{dir}/misc/BIN.R"))
 
 ### STAMP NUMBER AND TECH ### ### ### ### #
-tech <- "Flex"
+tech <- "10X"
 repl_of <- "PBMCs"
 ### ### ### ### ### ### ### ### ### ### ### 
-sce <- qread(glue("{proj_dir}/data/flex_pbmcs/raw/raw_sce.qs"))
+sce <- qread(glue("{proj_dir}/data/PBMCs_5prime/raw/raw_sce.qs"))
 
 # Read the 10X h5 file directly into a sparse matrix
 #sce <- DropletUtils::read10xCounts("/Users/emanuelepitino/PhD_Projects/Stamp_V4/data/flex_cell_lines/sample_filtered_feature_bc_matrix.h5")
@@ -30,19 +30,19 @@ sce <- qread(glue("{proj_dir}/data/flex_pbmcs/raw/raw_sce.qs"))
 #sce$Sample <- NULL
 #rownames(colData(sce)) <- sce$Barcode
 #sce$Barcode <- NULL
-sce$sample <- "Flex"
+sce$sample <- "5prime"
 
 counts(sce) <- as(counts(sce),"dgCMatrix")
 
 
-sname <- glue("Flex_{repl_of}")
-savedir <- glue("/Users/emanuelepitino/PhD_Projects/Stamp_V4/data/GEO_submission/Flex_data")
+sname <- glue("10X_{repl_of}_{unique(sce$sample)}")
+savedir <- glue("/Users/emanuelepitino/PhD_Projects/Stamp_V4/data/GEO_submission/10X_data")
 
 proc_dir <- glue("{savedir}/Processed/{sname}")
 raw_dir <- glue("{savedir}/Raw/{sname}")
 
-dir.create(proc_dir, showWarnings = F)
-dir.create(raw_dir, showWarnings = F)
+dir.create(proc_dir, showWarnings = F, recursive = T)
+dir.create(raw_dir, showWarnings = F, recursive = T)
 
 qsave(sce, file = glue("{proc_dir}/{sname}.qs"), nthreads = 8)
 writeMM(counts(sce), file = glue("{raw_dir}/{sname}.mtx"))

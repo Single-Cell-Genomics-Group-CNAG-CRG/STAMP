@@ -1,5 +1,5 @@
 ---
-title: "Level 1 annotation - PBMCs 5'"
+title: "Level 1 annotation"
 subtitle: "Emanuele Pitino"
 date: "`r Sys.Date()`"
 format: 
@@ -44,7 +44,7 @@ We load the single cell experiment objects already cleaned on quality metrics.
 ```{r}
 source(glue("{here()}/scripts/misc/BIN.R")) # bin
 source(glue("{here()}/scripts/misc/paths.R")) # paths
-sce <- qread(glue("{proj_dir}/data/PBMCs_5prime/QC/doublets_sce.qs"), nthreads = 8)
+sce <- qread(glue("{proj_dir}/data/10xLPS/QC/doublets_lps_sce.qs"), nthreads = 8)
 ```
 
 # Find Markers
@@ -81,8 +81,8 @@ for (name in names(mrk_ord)) {
   writeData(wb, sheet = name, mrk_ord[[name]]) # Write the data to the sheet
 }
 # Save the workbook
-dir.create(glue("{proj_dir}/Markers/PBMCs_5prime"), showWarnings = F, recursive = T)
-saveWorkbook(wb, glue("{proj_dir}/Markers/PBMCs_5prime/lvl1.xlsx"), overwrite = TRUE)
+dir.create(glue("{proj_dir}/Markers/10xLPS"), showWarnings = F, recursive = T)
+saveWorkbook(wb, glue("{proj_dir}/Markers/10xLPS/lvl1_lps.xlsx"), overwrite = TRUE)
 ```
 
 # Top markers vizualization
@@ -108,9 +108,10 @@ plotDots(sce, features = top_feat,group = "label", scale = T, center = T) +
 ```{r}
 sce$label <- as.character(sce$label)
 wrap_plots(
-  plotReducedDim(sce,"UMAP",scattermore = T, color_by = "label", text_by = "label", point_size = 1) + scale_color_manual(values = palette_general()),
+  plotReducedDim(sce,"UMAP",scattermore = T, color_by = "label", text_by = "label", point_size = 1) + scale_color_manual(values = palette_general()) +
+    theme(aspect.ratio = 1/1),
   
-  plotDots(sce, features = c("CD3E","CD8A","CD8B","CD4","CD79A","CD79B","NKG7","NCAM1","CD14","FCGR3A"),group = "label", scale = T, center = T) +
+  plotDots(sce, features = c("CD3E","CD8A","CD4","CD79A","CD79B","NKG7","NCAM1","CD14","FCGR3A","CD1C"),group = "label", scale = T, center = T) +
   coord_flip() +
   theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
         aspect.ratio = 1/4),
@@ -158,20 +159,18 @@ ggplot(df, aes(x = Var1, y = pct, fill = Var2)) +
 # Annotation
 ```{r}
 sce$label <- as.numeric(sce$label)
-sce$lvl1[sce$label == "1"] <- "lowq"
+sce$lvl1[sce$label == "1"] <- "NK"
 sce$lvl1[sce$label == "2"] <- "CD8"
 sce$lvl1[sce$label == "3"] <- "CD4"
-sce$lvl1[sce$label == "4"] <- "Myeloid"
-sce$lvl1[sce$label == "5"] <- "B"
-sce$lvl1[sce$label == "6"] <- "CD8"
-sce$lvl1[sce$label == "7"] <- "NK"
-sce$lvl1[sce$label == "8"] <- "Myeloid"
-sce$lvl1[sce$label == "9"] <- "Myeloid"
-sce$lvl1[sce$label == "10"] <- "Myeloid"
+sce$lvl1[sce$label == "4"] <- "CD4"
+sce$lvl1[sce$label == "5"] <- "LowQ"
+sce$lvl1[sce$label == "6"] <- "Monocyte"
+sce$lvl1[sce$label == "7"] <- "B"
+sce$lvl1[sce$label == "8"] <- "Monocyte"
+sce$lvl1[sce$label == "9"] <- "Monocyte"
 ```
 
 # Proportion of lvl1
-
 ```{r}
 df <- as.data.frame(table(sce$lvl1)) %>%
   mutate(pct = Freq / sum(Freq))
@@ -207,8 +206,9 @@ gg <- wrap_plots(
 gg
 ```
 
+
 ```{r}
-dir.create(glue("{proj_dir}/data/PBMCs_5prime/Lvl1"))
-qsave(sce, file = glue("{proj_dir}/data/PBMCs_5prime/Lvl1/lvl1_sce.qs"), nthreads = 8)
+dir.create(glue("{proj_dir}/data/10xLPS/Lvl1"))
+qsave(sce, file = glue("{proj_dir}/data/10xLPS/Lvl1/lvl1_lps_sce.qs"), nthreads = 8)
 ```
 

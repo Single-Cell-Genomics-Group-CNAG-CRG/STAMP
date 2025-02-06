@@ -1,5 +1,5 @@
 ---
-title: "Quality Control - NSCLC"
+title: "Quality Control - healthy PBMCs 5'"
 subtitle: "Emanuele Pitino"
 date: "`r Sys.Date()`"
 format: 
@@ -18,6 +18,8 @@ editor_options:
 execute:
   echo: true
 ---
+
+This dataset contains 5' scRNA-seq data from healthy PBMCs. The dataset was downloaded from the 10X genomics website at the following [link](https://www.10xgenomics.com/datasets/10k-human-pbmcs-5-v2-0-chromium-x-with-intronic-reads-2-standard). The FASTQs have also been downsampled to ~20k reads/cell before mapping with cellranger.
 
 ## Libraries
 ```{r}
@@ -55,13 +57,13 @@ sce <- addPerCellQCMetrics(sce, subsets=list(mito=mito))
 discard_sum <- isOutlier(sce$sum, 
                          type = "lower", 
                          log = TRUE,
-                         nmads = 2.5,
+                         nmads = 3,
                          batch = sce$Sample)
 # Detected outliers
 discard_detected <- isOutlier(sce$detected, 
                          type = "lower", 
                          log = TRUE,
-                         nmads = 2.5,
+                         nmads = 3,
                          batch = sce$Sample)
 # Detected outliers
 discard_mito <- isOutlier(sce$subsets_mito_percent, 

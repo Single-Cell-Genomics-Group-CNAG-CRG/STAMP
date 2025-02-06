@@ -1,0 +1,194 @@
+---
+title: "LPS stimulation comparison across 10x & STAMP"
+subtitle: "Emanuele Pitino"
+date: "`r Sys.Date()`"
+format: 
+  html:
+    theme: superhero
+    smooth-scroll: true
+    code-fold: true
+    self-contained: true
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+editor: source
+editor_options: 
+  chunk_output_type: console
+execute:
+  echo: true
+---
+
+In this script, we will compare DEGs in LPS activated PBMCs in Stamp & a scRNAseq study.
+
+```{r}
+# Libraries
+suppressPackageStartupMessages({
+  library(SingleCellExperiment)
+  library(dplyr)
+  library(here)
+  library(scater)
+  library(glue)
+  library(qs)
+  library(BiocParallel)
+  library(BiocNeighbors)
+  library(BiocSingular)
+  library(data.table)
+  library(spatstat)
+  library(InSituType)
+  library(EnhancedVolcano)
+  library(DESeq2)
+})
+```
+
+
+```{r}
+# Data loading
+dir <- glue("{here()}")
+source(glue("{dir}/scripts/misc/paths.R"))
+source(glue("{dir}/scripts/misc/BIN.R"))
+
+stamp <- "stamp_13a"
+res_dir <- glue("{proj_dir}/data/{stamp}/processed")
+sce <- qread(glue("{res_dir}/anno_sce_P1.qs"), nthreads = 8)
+```
+
+```{r}
+ctrl <- qread(glue("{proj_dir}/data/10xLPS/Lvl1/lvl1_ctrl_sce.qs"))
+lps <- qread(glue("{proj_dir}/data/10xLPS/Lvl1/lvl1_lps_sce.qs"))
+sc <- cbind(ctrl,lps)
+
+ctrl <- SingleCellExperiment(assays = list(counts = counts(ctrl)), colData = colData(ctrl))
+lps <- SingleCellExperiment(assays = list(counts = counts(lps)), colData = colData(lps))
+```
+
+```{r}
+library(MAST)
+# Extract log-normalized counts and metadata
+sce <- sce[,sce$experiment != "aCD3aCD28"]
+sce <- sce[,sce$timepoint == "4h"]
+sce <- sce[,sce$lvl1%in% c("act. mono.","class. mono.", "inflamm. mono.")]
+exprs <- logcounts(sce)  # Log-transformed expression
+meta <- colData(sce)  # Metadata with cluster annotations
+
+# Define comparison groups
+meta$cluster <- factor(meta$experiment)
+cells_1 <- colnames(sce)[meta$cluster == "ctrl"]
+cells_2 <- colnames(sce)[meta$cluster == "LPS"]
+
+# Subset expression data for selected clusters
+exprs_subset <- exprs[, c(cells_1, cells_2)]
+meta_subset <- meta[c(cells_1, cells_2), ]
+
+# Create MAST SingleCellAssay object
+exprs_subset <- as.matrix(exprs_subset)  
+sca <- FromMatrix(exprs_subset, cData = meta_subset)
+# Fit the MAST model
+zlmCond <- zlm(~ cluster, sca)
+
+# Perform likelihood ratio test
+summaryCond <- summary(zlmCond, doLRT = "clusterLPS")
+summaryDT <- summaryCond$datatable
+
+# Extract logFC & adjusted p-values
+logFC <- summaryDT[contrast == "clusterLPS" & component == "logFC", .(primerid, coef)]
+pval <- summaryDT[contrast == "clusterLPS" & component == "H", .(primerid, `Pr(>Chisq)`)]
+de_results <- merge(logFC, pval, by = "primerid")
+
+# Adjust p-values
+de_results$padj <- p.adjust(de_results$`Pr(>Chisq)`, method = "fdr")
+
+# Define significance thresholds
+de_results$signif <- ifelse(de_results$padj < 0.05 & abs(de_results$coef) > 0.2, "Significant", "Not Significant")
+```
+
+```{r}
+deg_sc <- readxl::read_xlsx(glue("{proj_dir}/Markers/LPS_PBMCs_sc/Table5.xlsx"), sheet = 2)
+deg_sc$gene <- deg_sc$...1
+deg_sc <- deg_sc[!grepl("^CITE-", deg_sc$gene), ]
+
+deg_sc <- unique(deg_sc$gene[abs(deg_sc$avg_logFC) > 0.25 & deg_sc$p_val_adj < 0.05])
+deg_sc <- c(deg_sc,"CCL3/L1/L3") # add CCL3/L1/L3 as in the sc obj we have CCL3L1 and CCL3L3, splitted in two, but in the cosmx panel is written as CCL3/L1/L3 so same genes but written differently
+```
+
+```{r}
+library(ggrepel)  # For non-overlapping text labels
+# Define threshold for labeling significant genes
+de_results$label <- ifelse(de_results$padj < 0.05 & abs(de_results$coef) > 0.25, de_results$primerid, NA)
+# Create Volcano Plot with Labels
+ggplot(de_results, aes(x = coef, y = -log10(padj), color = signif)) +
+  geom_point(alpha = 0.6) +
+  scale_color_manual(values = c("Significant" = "red", "Not Significant" = "gray")) +
+  labs(title = "Volcano Plot (MAST)", x = "Log2 Fold Change", y = "-Log10 Adjusted P-value") +
+  theme_minimal() +
+  geom_text_repel(aes(label = label), size = 3, max.overlaps = 20)  # Add gene labels
+```
+
+```{r}
+library(ggrepel)  # For non-overlapping text labels
+# Define a new column for highlighting specific genes
+de_results$highlight <- ifelse(de_results$primerid %in% deg_sc, "Highlighted", "Not Highlighted")
+# Define labels only for genes in deg_sc
+de_results$label <- ifelse(de_results$primerid %in% deg_sc, de_results$primerid, NA)
+# Create the Volcano Plot
+ggplot(de_results, aes(x = coef, y = -log10(padj))) +
+  # Plot non-highlighted genes first (gray)
+  geom_point(data = subset(de_results, highlight == "Not Highlighted"), 
+             aes(color = highlight), alpha = 0.6) +
+  # Plot highlighted genes on top (blue)
+  geom_point(data = subset(de_results, highlight == "Highlighted"), 
+             aes(color = highlight), alpha = 0.9, size = 1) +
+  scale_color_manual(values = c("Highlighted" = "blue", "Not Highlighted" = "gray80")) +  # Highlighted genes in blue
+  labs(title = "Volcano Plot (Highlighted Genes)", x = "Log2 Fold Change", y = "-Log10 Adjusted P-value") +
+  theme_minimal() +
+  geom_text_repel(data = subset(de_results, highlight == "Highlighted"), 
+                  aes(label = label), size = 3, max.overlaps = 20)  # Label only highlighted genes
+```
+
+
+```{r}
+####################################################################################
+# 1. Activated monocytes : ctrl vs lps at 4h
+####################################################################################
+sc$id <- paste0(sc$Sample,"_",sc$lvl1)
+sc <- sc[,sc$lvl1 == "Monocyte"]
+agg <- aggregateAcrossCells(sc, ids = sc$id, use.assay.type = "counts", statistics = "sum")
+
+sizeFactors(agg) <- NULL
+# Create obj
+dds <- DESeqDataSetFromMatrix(countData = counts(agg), # take matrix
+                              colData = colData(agg), # take coldata
+                              design= ~ Sample) # indicate replicates and exp columns
+
+dds <- DESeq(dds, BPPARAM = bp)
+resultsNames(dds) # lists the coefficients
+res <- results(dds, name="Sample_lps_vs_ctrl")
+# Shrink log fold changes association with condition: only when few cells
+#res <- lfcShrink(dds, coef="experiment_LPS_vs_ctrl", type="apeglm")
+act_mono_lps_ctrl_4h <- EnhancedVolcano(res,
+                lab = rownames(res),
+                x = 'log2FoldChange',
+                y = 'pvalue',
+                FCcutoff = 0.25,
+                pCutoff = 0.05,
+                pCutoffCol = 'padj',
+                title = "LPS vs Ctrl - 4h",
+                #subtitle = glue("subset: {unique(sub$lvl1)}"),
+                selectLab = c('CXCL8','CCL5','INSIG1',
+                               'CCL3/L1/L3','ITGB8','G0S2','INHBA','PTGS2','IL6',"STAT4"),
+                boxedLabels = TRUE,
+                colAlpha = 1,
+                legendPosition = 'none',
+                legendLabSize = 14,
+                legendIconSize = 4.0,
+                drawConnectors = TRUE,
+                widthConnectors = 0.5,
+                colConnectors = 'black',
+                labSize = 3,
+                xlab = bquote(~Log[2]~ 'fold change'),
+                xlim = c(-1,1),
+                ylim = c(0,15)) 
+act_mono_lps_ctrl_4h
+```
+
+

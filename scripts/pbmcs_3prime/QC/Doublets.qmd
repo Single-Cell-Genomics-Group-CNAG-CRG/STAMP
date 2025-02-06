@@ -59,6 +59,7 @@ sce <- logNormCounts(sce)
 ```{r}
 dec.var <- modelGeneVar(sce, BPPARAM = bp) # model gene var
 hvg <- getTopHVGs(dec.var,fdr.threshold = 0.8) # find variable features by fdr 
+hvg <- hvg[1:5000]
 length(hvg)
 
 ```
@@ -70,7 +71,7 @@ sce <-  runPCA(sce, subset_row = hvg)
 ```
 
 ### Find dimensionality of the dataset
-```{r, fig.width= 4 , fig.height= 6}
+```{r, fig.width= 6 , fig.height= 6}
 percent.var <- attr(reducedDim(sce), "percentVar")
 plot(percent.var, log="y", xlab="PC", ylab="Variance explained (%)")
 
