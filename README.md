@@ -1,6 +1,9 @@
-# STAMP: Single-Cell Transcriptomics Analysis and Multimodal Profiling through Imaging
+# STAMP: Single-Cell Transcriptomics Analysis and Multimodal Profiling Through Imaging
 
-This repository contains the code used in the **STAMP** project, focusing on spatial transcriptomics analysis and multiplexing profiling of single cells. The code was utilized to analyze the data presented in the corresponding paper.
+STAMP (Single-Cell Transcriptomics Analysis and Multimodal Profiling) is a scalable, cost-effective approach for single-cell profiling that eliminates sequencing costs by integrating spatial transcriptomics and proteomics imaging. By immobilizing cells onto slides, STAMP enables high-throughput single- and multimodal (RNA, protein, and H&E) profiling while preserving cellular structure. Its flexible format supports large-scale studies across PBMCs, cell lines, stem cells, dissociated tissues, and FFPE samples. STAMP facilitates high-throughput immunophenotyping, rare cell detection, and perturbation studies, demonstrated across over 10 million cells and 6 billion transcripts. This strategy revolutionizes cellular profiling, making it more accessible and scalable for research and clinical applications.
+
+This repository contains all the scripts, notebooks and reports to reproduce all analysis from our manuscript entitled STAMP: Single-Cell Transcriptomics and Multimodal Profiling Through Imaging.
+
 
 ## Technologies Used
 - **Spatial Transcriptomics Platforms**:
@@ -8,8 +11,8 @@ This repository contains the code used in the **STAMP** project, focusing on spa
   - 10X Genomics Xenium
 - **Single Cell RNA sequencing Platforms**:
   - 10X Genomics Flex
-  - 10X 5'
-  - 10X 3'
+  - 10X Genomics 5'
+  - 10X Genomics 3'
  
 ## Repository Structure
 
@@ -33,7 +36,7 @@ This repository contains the code used in the **STAMP** project, focusing on spa
 
 ## R Version
 
-This code was run using **R version 4.4.1**.
+Most of this code was run using **R version 4.4.1** in a MacBook Pro M3. Computational heavy tasks, such as alignment of the scRNAseq FASTQs to the reference genome, were performed in a HPC cluster.
 ---
 
 *For more details, please refer to the project's paper or contact the authors.*
