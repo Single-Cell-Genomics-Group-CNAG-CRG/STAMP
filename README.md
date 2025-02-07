@@ -34,9 +34,8 @@ This repository contains all the scripts, notebooks and reports to reproduce all
     - **Sub-sample Folders**:
       - For samples containing multiple sub-samples (e.g., multiplexed slides), there are folders like **Clines/** and **PBMC/** (e.g., in `stamp_3/`), which contain analyses of the respective sub-samples.
 
-## R Version
 
-Most of this code was run using **R version 4.4.1** in a MacBook Pro M3. Computational heavy tasks, such as alignment of the scRNAseq FASTQs to the reference genome, were performed in a HPC cluster.
+  Most of this code was run using **R version 4.4.1** in a MacBook Pro M3. Computational heavy tasks, such as alignment of the scRNAseq FASTQs to the reference genome, were performed in a HPC cluster.
 ---
 
 *For more details, please refer to the project's paper or contact the authors.*
