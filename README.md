@@ -4,7 +4,7 @@ STAMP (Single-Cell Transcriptomics Analysis and Multimodal Profiling) is a scala
 
 This repository contains all the scripts, notebooks and reports to reproduce all analysis from our manuscript entitled STAMP: Single-Cell Transcriptomics and Multimodal Profiling Through Imaging.
 
-
+![STAMP workflow overview](STAMP.png)
 ## Technologies Used
 - **Spatial Transcriptomics Platforms**:
   - NanoString CosMx
@@ -37,6 +37,15 @@ This repository contains all the scripts, notebooks and reports to reproduce all
 
   Most of this code was run using **R version 4.4.1** in a MacBook Pro M3. Computational heavy tasks, such as alignment of the scRNAseq FASTQs to the reference genome, were performed in a HPC cluster.
 ---
+
+## Useful workflow resurces 
+
+To help new users understand the analyses workflows performed in STAMP, we are herein providing some of the resources that we found useful during our analyses. In particular:
+
+  - **[CosMx Analysis Scratch Space]** (https://nanostring-biostats.github.io/CosMx-Analysis-Scratch-Space/): here the users can find useful resources developed by NanoString. In particular:
+    - **[ Basics of CosMx Analysis in R]** (https://nanostring-biostats.github.io/CosMx-Analysis-Scratch-Space/posts/vignette-basic-analysis/) to familiarize with CosMx data structure
+    - **[Cell Typing Basics]** (https://nanostring-biostats.github.io/CosMx-Analysis-Scratch-Space/posts/cell-typing-basics/)
+  - **[InSituType]** (https://github.com/Nanostring-Biostats/InSituType): this is a link to the repository of the tool used in STAMP to cluster CosMx datasets
 
 *For more details, please refer to the project's paper or contact the authors.*
 
