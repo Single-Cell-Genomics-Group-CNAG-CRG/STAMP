@@ -11,8 +11,9 @@ This repository contains all the scripts, notebooks, and reports needed to repro
 ## Technologies Used
 
 - **Spatial Transcriptomics Platforms**:
-  - NanoString CosMx
+  - Bruker CosMx
   - 10X Genomics Xenium
+  - Akoya PhenoCycler-Fusion
 
 - **Single-Cell RNA-seq Platforms**:
   - 10X Genomics Flex
