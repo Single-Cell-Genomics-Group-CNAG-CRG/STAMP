@@ -56,6 +56,9 @@ To help new users understand the analytical workflows used in **STAMP**, we’ve
 - **[InSituType](https://github.com/Nanostring-Biostats/InSituType)**: The clustering tool used in STAMP to analyze CosMx datasets.
 
 - **[Orchestrating Single-Cell Analysis (OSCA) Book](https://bioconductor.org/books/release/OSCA/)**: The single-cell RNA-seq analyses, as well as parts of the analyses of the Xenium datasets, were conducted by following the workflows and best practices outlined in this comprehensive Bioconductor book.
+- **[Open source tools for PhenoCycler (and others) proteomics data](https://tinyurl.com/bdcusx7t)**: The proteomics processing of PhenoCycler data was performed using the approach outlined in this document.
+- **[Spatial OMICs pipeline and analysis](https://gustaveroussy.github.io/sopa/)**: Built on top of SpatialData, Sopa enables processing and analyses of spatial omics data with single-cell resolution (spatial transcriptomics or multiplex imaging data) using a standard data structure and output.
+- **[Analysis of multiplexed proteomics using Seurat](https://satijalab.org/seurat/articles/seurat5_spatial_vignette_2#human-lymph-node-akoya-codex-system)**: This vignette outlines how to use Seurat for analyzing (already processed) PhenoCycler and other spatial proteomics datasets.
 
 ---
 
