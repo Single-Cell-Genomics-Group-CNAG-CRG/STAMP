@@ -1,8 +1,12 @@
+<p align="justify">
+
 # STAMP: Single-Cell Transcriptomics Analysis and Multimodal Profiling Through Imaging
 
 **STAMP** (Single-Cell Transcriptomics Analysis and Multimodal Profiling) is a scalable, cost-effective approach for single-cell profiling that eliminates sequencing costs by integrating spatial transcriptomics and proteomics imaging. By immobilizing cells onto slides, STAMP enables high-throughput single- and multimodal (RNA, protein, and H&E) profiling while preserving cellular structure. Its flexible format supports large-scale studies across PBMCs, cell lines, stem cells, dissociated tissues, and FFPE samples. STAMP facilitates high-throughput immunophenotyping, rare cell detection, and perturbation studies—demonstrated across over 10 million cells and 6 billion transcripts. This strategy revolutionizes cellular profiling, making it more accessible and scalable for research and clinical applications.
 
 This repository contains all the scripts, notebooks, and reports needed to reproduce the analyses from our manuscript titled [**STAMP: Single-Cell Transcriptomics and Multimodal Profiling Through Imaging**](https://www.cell.com/cell/abstract/S0092-8674(25)00577-X).
+
+</p>
 
 ![STAMP graphical abstract](GraphicalAbstract.png)
 
