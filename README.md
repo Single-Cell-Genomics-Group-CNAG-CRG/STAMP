@@ -4,6 +4,8 @@
 
 This repository contains all the scripts, notebooks, and reports needed to reproduce the analyses from our manuscript titled [**STAMP: Single-Cell Transcriptomics and Multimodal Profiling Through Imaging**](https://www.cell.com/cell/abstract/S0092-8674(25)00577-X).
 
+![STAMP graphical abstract](GraphicalAbstract.pdf)
+
 ![STAMP workflow overview](STAMP.png)
 
 ---
